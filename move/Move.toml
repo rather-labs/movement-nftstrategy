@@ -1,0 +1,17 @@
+[package]
+name = "movement-nftstrategy"
+version = "1.0.0"
+authors = ["Rather Labs Inc."]
+
+[addresses]
+nft_strategy_addr = "0x9154cb2a67d450d566e5edfa1c8b711120b96f8ca3f9239f8c626be936dbb171"
+
+[dev-addresses]
+nft_strategy_addr = "0xbeef"
+
+[dependencies.AptosFramework]
+git = "https://github.com/movementlabsxyz/aptos-core.git"
+rev = "movement"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dev-dependencies]
