@@ -19,14 +19,18 @@ module nft_strategy_addr::pool {
         last_block_timestamp: u64,
         k_last: u128,
         // Store vault account addresses instead of assets directly
-        vault_addr: address
+        vault_addr: address,
+        // Fee configuration
+        fee_recipient: address,
+        fee_bps: u64 // Fee in basis points (e.g., 30 = 0.3%)
     }
 
     struct PoolEvents<phantom X, phantom Y> has key {
         mint_events: EventHandle<MintEvent>,
         burn_events: EventHandle<BurnEvent>,
         swap_events: EventHandle<SwapEvent>,
-        sync_events: EventHandle<SyncEvent>
+        sync_events: EventHandle<SyncEvent>,
+        fee_collected_events: EventHandle<FeeCollectedEvent>
     }
 
     struct MintEvent has drop, store {
@@ -56,7 +60,19 @@ module nft_strategy_addr::pool {
         reserve_y: u64
     }
 
-    public fun create_pool<X, Y>(account: &signer) {
+    struct FeeCollectedEvent has drop, store {
+        token_type: u8, // 0 = X, 1 = Y
+        fee_amount: u64,
+        fee_recipient: address
+    }
+
+    // Fee constants
+    const MAX_FEE_BPS: u64 = 1000; // Maximum 10% fee
+    const ZERO_ADDRESS: address = @0x0;
+
+    public fun create_pool<X, Y>(
+        account: &signer, fee_recipient: address, fee_bps: u64
+    ) {
         let account_addr = signer::address_of(account);
 
         assert!(
@@ -66,6 +82,13 @@ module nft_strategy_addr::pool {
         assert!(
             !is_same_coin<X, Y>(),
             errors::identical_addresses()
+        );
+        // Validate fee parameters
+        assert!(fee_bps <= MAX_FEE_BPS, errors::invalid_fee_percentage());
+        // If fee_bps > 0, fee_recipient must be non-zero
+        assert!(
+            fee_bps == 0 || fee_recipient != ZERO_ADDRESS,
+            errors::invalid_fee_recipient()
         );
 
         lp_token::initialize<X, Y>(account);
@@ -80,7 +103,9 @@ module nft_strategy_addr::pool {
                 reserve_y: 0,
                 last_block_timestamp: timestamp::now_seconds(),
                 k_last: 0,
-                vault_addr
+                vault_addr,
+                fee_recipient,
+                fee_bps
             }
         );
 
@@ -90,7 +115,8 @@ module nft_strategy_addr::pool {
                 mint_events: account::new_event_handle<MintEvent>(account),
                 burn_events: account::new_event_handle<BurnEvent>(account),
                 swap_events: account::new_event_handle<SwapEvent>(account),
-                sync_events: account::new_event_handle<SyncEvent>(account)
+                sync_events: account::new_event_handle<SyncEvent>(account),
+                fee_collected_events: account::new_event_handle<FeeCollectedEvent>(account)
             }
         );
     }
@@ -220,16 +246,29 @@ module nft_strategy_addr::pool {
             errors::pool_not_exists()
         );
 
-        let amount_x_in = fungible_asset::amount(&asset_x);
-        assert!(amount_x_in > 0, errors::zero_amount());
+        let total_amount_x_in = fungible_asset::amount(&asset_x);
+        assert!(total_amount_x_in > 0, errors::zero_amount());
 
         let pool = borrow_global_mut<Pool<X, Y>>(pool_addr);
+
+        // Calculate protocol fee from input amount
+        let fee_amount = calculate_fee(total_amount_x_in, pool.fee_bps);
+        let amount_x_in = total_amount_x_in - fee_amount;
+
         let amount_y_out =
             math::get_amount_out(amount_x_in, pool.reserve_x, pool.reserve_y);
         assert!(amount_y_out >= min_amount_out, errors::insufficient_output_amount());
 
-        // Store input asset in vault and withdraw output asset
+        // Store input asset in vault
         vault::deposit(pool.vault_addr, asset_x);
+
+        // Withdraw and send fee to fee recipient if applicable
+        let fee_recipient = pool.fee_recipient;
+        if (fee_amount > 0 && fee_recipient != ZERO_ADDRESS) {
+            let metadata_x = get_token_metadata<X>();
+            let fee_asset = vault::withdraw(pool.vault_addr, metadata_x, fee_amount);
+            primary_fungible_store::deposit(fee_recipient, fee_asset);
+        };
 
         let metadata_y = get_token_metadata<Y>();
         let asset_y_out = vault::withdraw(pool.vault_addr, metadata_y, amount_y_out);
@@ -251,6 +290,18 @@ module nft_strategy_addr::pool {
             }
         );
 
+        // Emit fee collected event if fee was taken
+        if (fee_amount > 0 && fee_recipient != ZERO_ADDRESS) {
+            event::emit_event(
+                &mut pool_events.fee_collected_events,
+                FeeCollectedEvent {
+                    token_type: 0, // X token
+                    fee_amount,
+                    fee_recipient
+                }
+            );
+        };
+
         asset_y_out
     }
 
@@ -266,16 +317,29 @@ module nft_strategy_addr::pool {
             errors::pool_not_exists()
         );
 
-        let amount_y_in = fungible_asset::amount(&asset_y);
-        assert!(amount_y_in > 0, errors::zero_amount());
+        let total_amount_y_in = fungible_asset::amount(&asset_y);
+        assert!(total_amount_y_in > 0, errors::zero_amount());
 
         let pool = borrow_global_mut<Pool<X, Y>>(pool_addr);
+
+        // Calculate protocol fee from input amount
+        let fee_amount = calculate_fee(total_amount_y_in, pool.fee_bps);
+        let amount_y_in = total_amount_y_in - fee_amount;
+
         let amount_x_out =
             math::get_amount_out(amount_y_in, pool.reserve_y, pool.reserve_x);
         assert!(amount_x_out >= min_amount_out, errors::insufficient_output_amount());
 
-        // Store input asset in vault and withdraw output asset
+        // Store input asset in vault
         vault::deposit(pool.vault_addr, asset_y);
+
+        // Withdraw and send fee to fee recipient if applicable
+        let fee_recipient = pool.fee_recipient;
+        if (fee_amount > 0 && fee_recipient != ZERO_ADDRESS) {
+            let metadata_y = get_token_metadata<Y>();
+            let fee_asset = vault::withdraw(pool.vault_addr, metadata_y, fee_amount);
+            primary_fungible_store::deposit(fee_recipient, fee_asset);
+        };
 
         let metadata_x = get_token_metadata<X>();
         let asset_x_out = vault::withdraw(pool.vault_addr, metadata_x, amount_x_out);
@@ -297,6 +361,18 @@ module nft_strategy_addr::pool {
             }
         );
 
+        // Emit fee collected event if fee was taken
+        if (fee_amount > 0 && fee_recipient != ZERO_ADDRESS) {
+            event::emit_event(
+                &mut pool_events.fee_collected_events,
+                FeeCollectedEvent {
+                    token_type: 1, // Y token
+                    fee_amount,
+                    fee_recipient
+                }
+            );
+        };
+
         asset_x_out
     }
 
@@ -309,6 +385,27 @@ module nft_strategy_addr::pool {
 
         let pool = borrow_global<Pool<X, Y>>(pool_addr);
         (pool.reserve_x, pool.reserve_y, pool.last_block_timestamp)
+    }
+
+    #[view]
+    public fun get_fee_info<X, Y>(): (address, u64) acquires Pool {
+        let pool_addr = get_pool_address<X, Y>();
+        if (!exists<Pool<X, Y>>(pool_addr)) {
+            return (ZERO_ADDRESS, 0)
+        };
+
+        let pool = borrow_global<Pool<X, Y>>(pool_addr);
+        (pool.fee_recipient, pool.fee_bps)
+    }
+
+    /// Calculate fee amount from input amount
+    /// fee_bps: fee in basis points (100 bps = 1%)
+    fun calculate_fee(amount: u64, fee_bps: u64): u64 {
+        if (fee_bps == 0) { 0 }
+        else {
+            // fee = amount * fee_bps / 10000
+            math::safe_mul_div(amount, fee_bps, 10000)
+        }
     }
 
     fun update_reserves<X, Y>(
@@ -461,13 +558,35 @@ module nft_strategy_addr::pool {
     struct TestCoinY has key {}
 
     #[test(account = @0xbeef)]
-    fun test_create_pool(account: &signer) {
+    fun test_create_pool(account: &signer) acquires Pool {
         let account_addr = signer::address_of(account);
         account::create_account_for_test(account_addr);
         timestamp::set_time_has_started_for_testing(&account::create_signer_for_test(@0x1));
 
-        create_pool<TestCoinX, TestCoinY>(account);
+        // Create pool with 0.5% fee (50 bps) to account
+        create_pool<TestCoinX, TestCoinY>(account, account_addr, 50);
         assert!(exists_pool<TestCoinX, TestCoinY>(), 1);
+
+        // Verify fee configuration
+        let (fee_recipient, fee_bps) = get_fee_info<TestCoinX, TestCoinY>();
+        assert!(fee_recipient == account_addr, 2);
+        assert!(fee_bps == 50, 3);
+    }
+
+    #[test(account = @0xbeef)]
+    fun test_create_pool_no_fee(account: &signer) acquires Pool {
+        let account_addr = signer::address_of(account);
+        account::create_account_for_test(account_addr);
+        timestamp::set_time_has_started_for_testing(&account::create_signer_for_test(@0x1));
+
+        // Create pool with no protocol fee
+        create_pool<TestCoinX, TestCoinY>(account, ZERO_ADDRESS, 0);
+        assert!(exists_pool<TestCoinX, TestCoinY>(), 1);
+
+        // Verify no fee configuration
+        let (fee_recipient, fee_bps) = get_fee_info<TestCoinX, TestCoinY>();
+        assert!(fee_recipient == ZERO_ADDRESS, 2);
+        assert!(fee_bps == 0, 3);
     }
 }
 

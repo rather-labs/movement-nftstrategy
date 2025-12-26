@@ -59,7 +59,9 @@ module nft_strategy_addr::factory {
         );
     }
 
-    public fun create_pool<X, Y>(account: &signer): address acquires Factory, FactoryEvents {
+    public fun create_pool<X, Y>(
+        account: &signer, fee_recipient: address, fee_bps: u64
+    ): address acquires Factory, FactoryEvents {
         let factory_addr = signer::address_of(account);
         assert!(
             exists<Factory>(factory_addr),
@@ -79,7 +81,7 @@ module nft_strategy_addr::factory {
             errors::pool_already_exists()
         );
 
-        pool::create_pool<X, Y>(account);
+        pool::create_pool<X, Y>(account, fee_recipient, fee_bps);
         let pool_address = signer::address_of(account);
 
         let pool_info = PoolInfo {
@@ -327,8 +329,10 @@ module nft_strategy_addr::factory {
     }
 
     // Entry function
-    public entry fun create_pool_entry<X, Y>(account: &signer) acquires Factory, FactoryEvents {
-        let _pool_address = create_pool<X, Y>(account);
+    public entry fun create_pool_entry<X, Y>(
+        account: &signer, fee_recipient: address, fee_bps: u64
+    ) acquires Factory, FactoryEvents {
+        let _pool_address = create_pool<X, Y>(account, fee_recipient, fee_bps);
     }
 
     #[test_only]
@@ -359,7 +363,8 @@ module nft_strategy_addr::factory {
         timestamp::set_time_has_started_for_testing(&account::create_signer_for_test(@0x1));
 
         initialize(account, account_addr);
-        let pool_addr = create_pool<TestTokenX, TestTokenY>(account);
+        // Create pool with 0.3% fee (30 bps) sent to the account
+        let pool_addr = create_pool<TestTokenX, TestTokenY>(account, account_addr, 30);
 
         assert!(pool_addr != ZERO_ADDRESS, 1);
         assert!(all_pools_length() == 1, 2);

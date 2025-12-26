@@ -33,6 +33,10 @@ module nft_strategy_addr::errors {
     const EINVALID_TOKEN_TYPE: u64 = 20;
     const ETOKEN_REGISTRATION_FAILED: u64 = 21;
 
+    // Fee errors
+    const EINVALID_FEE_PERCENTAGE: u64 = 22;
+    const EINVALID_FEE_RECIPIENT: u64 = 23;
+
     public fun pool_already_exists(): u64 {
         EPOOL_ALREADY_EXISTS
     }
@@ -115,6 +119,14 @@ module nft_strategy_addr::errors {
 
     public fun token_registration_failed(): u64 {
         ETOKEN_REGISTRATION_FAILED
+    }
+
+    public fun invalid_fee_percentage(): u64 {
+        EINVALID_FEE_PERCENTAGE
+    }
+
+    public fun invalid_fee_recipient(): u64 {
+        EINVALID_FEE_RECIPIENT
     }
 }
 
