@@ -437,13 +437,32 @@ module nft_strategy_addr::pool {
     fun get_token_metadata<T>(): Object<Metadata> {
         // Get metadata from the token's module based on type name
         let type_name = type_info::struct_name(&type_info::type_of<T>());
-        if (type_name == b"TokenA") {
+        if (type_name == b"WMOVE") {
+            // WMOVE (Wrapped MOVE) Integration:
+            // ─────────────────────────────────
+            // WMOVE is a fungible asset that wraps the native MOVE coin 1:1.
+            // When a user calls pool functions with type parameter `WMOVE`, we need to
+            // resolve it to the correct FA metadata object.
+            //
+            // The WMOVE module creates its metadata object at a deterministic address
+            // derived from: sha3_256(deployer_address || seed || 0xFE)
+            // where seed = b"WMOVE" (set in wmove::init_module).
+            //
+            // This allows the pool to:
+            // 1. Accept WMOVE as a valid token type (e.g., Pool<RatherToken, WMOVE>)
+            // 2. Withdraw/deposit WMOVE via primary_fungible_store using this metadata
+            // 3. Enable trading pairs like RatherToken/WMOVE (native MOVE exposure)
+            //
+            // Users must first wrap their native MOVE via wmove::wrap() before
+            // adding liquidity or swapping. After trading, they can unwrap via
+            // wmove::unwrap() to get native MOVE back.
             object::address_to_object<Metadata>(
-                object::create_object_address(&@nft_strategy_addr, b"TokenA")
+                object::create_object_address(&@nft_strategy_addr, b"WMOVE")
             )
-        } else if (type_name == b"TokenB") {
+        } else if (type_name == b"RatherToken") {
+            // Rather Token
             object::address_to_object<Metadata>(
-                object::create_object_address(&@nft_strategy_addr, b"TokenB")
+                object::create_object_address(&@nft_strategy_addr, b"RatherToken")
             )
         } else {
             // For any other token type, try to use the type name as the object seed
