@@ -37,6 +37,23 @@ module nft_strategy_addr::errors {
     const EINVALID_FEE_PERCENTAGE: u64 = 22;
     const EINVALID_FEE_RECIPIENT: u64 = 23;
 
+    // Marketplace errors
+    const ELISTING_NOT_EXISTS: u64 = 24;
+    const ELISTING_ALREADY_EXISTS: u64 = 25;
+    const EINVALID_PRICE: u64 = 26;
+    const ENFT_NOT_OWNED: u64 = 27;
+    const ENOT_SELLER: u64 = 28;
+    const ESELLER_CANNOT_BUY: u64 = 29;
+    const EMARKETPLACE_NOT_INITIALIZED: u64 = 30;
+    const EMARKETPLACE_ALREADY_INITIALIZED: u64 = 31;
+
+    // NFT Collection errors
+    const ECOLLECTION_NOT_EXISTS: u64 = 32;
+    const ECOLLECTION_ALREADY_EXISTS: u64 = 33;
+    const EMAX_SUPPLY_REACHED: u64 = 34;
+    const ENOT_COLLECTION_CREATOR: u64 = 35;
+    const EINVALID_TOKEN_ID: u64 = 36;
+
     public fun pool_already_exists(): u64 {
         EPOOL_ALREADY_EXISTS
     }
@@ -127,6 +144,58 @@ module nft_strategy_addr::errors {
 
     public fun invalid_fee_recipient(): u64 {
         EINVALID_FEE_RECIPIENT
+    }
+
+    public fun listing_not_exists(): u64 {
+        ELISTING_NOT_EXISTS
+    }
+
+    public fun listing_already_exists(): u64 {
+        ELISTING_ALREADY_EXISTS
+    }
+
+    public fun invalid_price(): u64 {
+        EINVALID_PRICE
+    }
+
+    public fun nft_not_owned(): u64 {
+        ENFT_NOT_OWNED
+    }
+
+    public fun not_seller(): u64 {
+        ENOT_SELLER
+    }
+
+    public fun seller_cannot_buy(): u64 {
+        ESELLER_CANNOT_BUY
+    }
+
+    public fun marketplace_not_initialized(): u64 {
+        EMARKETPLACE_NOT_INITIALIZED
+    }
+
+    public fun marketplace_already_initialized(): u64 {
+        EMARKETPLACE_ALREADY_INITIALIZED
+    }
+
+    public fun collection_not_exists(): u64 {
+        ECOLLECTION_NOT_EXISTS
+    }
+
+    public fun collection_already_exists(): u64 {
+        ECOLLECTION_ALREADY_EXISTS
+    }
+
+    public fun max_supply_reached(): u64 {
+        EMAX_SUPPLY_REACHED
+    }
+
+    public fun not_collection_creator(): u64 {
+        ENOT_COLLECTION_CREATOR
+    }
+
+    public fun invalid_token_id(): u64 {
+        EINVALID_TOKEN_ID
     }
 }
 
