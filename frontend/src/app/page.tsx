@@ -94,7 +94,7 @@ const features = [
   {
     title: 'Fee-On-Transfer Yield',
     description:
-      'Every marketplace or pool interaction returns 10% to the strategy treasury, compounding the next buy and accelerating the cycle.',
+      'Every pool swap returns 10% to the strategy treasury, compounding the next buy and accelerating the cycle.',
     icon: StarIcon,
   },
   {
