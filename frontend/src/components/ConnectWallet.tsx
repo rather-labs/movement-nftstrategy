@@ -49,9 +49,21 @@ export const ConnectWalletButton = (buttonProps: ConnectWalletButtonProps) => {
     return `${str.slice(0, 6)}...${str.slice(-4)}`;
   };
 
-  // Movement Testnet chainId = 250
-  const isTestnet = network?.chainId === 250;
-  const networkLabel = isTestnet ? 'Testnet' : 'Mainnet';
+  // Check network name for testnet indicators
+  let networkName = '';
+  if (network?.name) {
+    if (typeof network.name === 'string') {
+      networkName = network.name;
+    } else if (typeof network.name === 'object') {
+      networkName = (network.name as any).name || JSON.stringify(network.name);
+    }
+  }
+  const isTestnet =
+    networkName.toLowerCase().includes('testnet') ||
+    networkName.toLowerCase().includes('bardock') ||
+    networkName.toLowerCase().includes('movement') ||
+    networkName === 'Testnet';
+  const networkLabel = isTestnet ? 'Testnet' : networkName || 'Unknown';
   const networkColor = isTestnet ? 'purple' : 'blue';
 
   return connected && currentAddress ? (

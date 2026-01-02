@@ -94,6 +94,7 @@ export function WalletSelectionModal({ children }: WalletSelectionModalProps) {
                           alt={wallet.name}
                           boxSize="24px"
                           borderRadius="sm"
+                          fallbackSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjOUI4QkI5Ii8+PC9zdmc+"
                         />
                       ) : undefined
                     }

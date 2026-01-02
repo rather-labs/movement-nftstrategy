@@ -53,6 +53,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [account, setAccount] = useState<{ address: { toString: () => string } } | null>(null);
+  const [network, setNetwork] = useState<{ name: string } | null>(null);
   const [wallets, setWallets] = useState<WalletInfo[]>([]);
   const [nightlyWallet, setNightlyWallet] = useState<any>(null);
 
@@ -65,11 +66,15 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
       // Check for Nightly wallet
       if (typeof window !== 'undefined' && (window as any).nightly?.aptos) {
+        const nightlyAptos = (window as any).nightly.aptos;
         detected.push({
           name: 'Nightly',
-          icon: 'https://nightly.app/img/logo.png',
+          // Use the wallet's own icon if available, otherwise use a fallback
+          icon:
+            nightlyAptos.icon ||
+            'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjNkU0MUU2Ii8+PHBhdGggZD0iTTEyIDZDOC42ODYgNiA2IDguNjg2IDYgMTJDNiAxNS4zMTQgOC42ODYgMTggMTIgMThDMTUuMzE0IDE4IDE4IDE1LjMxNCAxOCAxMkMxOCA4LjY4NiAxNS4zMTQgNiAxMiA2WiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
         });
-        setNightlyWallet((window as any).nightly.aptos);
+        setNightlyWallet(nightlyAptos);
       }
 
       // Check for Petra wallet
@@ -109,6 +114,35 @@ export function WalletProvider({ children }: WalletProviderProps) {
               },
             });
             setConnected(true);
+
+            // Get network info from wallet
+            try {
+              const networkInfo = await nightlyWallet.network?.();
+              console.log('Nightly network info:', networkInfo);
+              if (networkInfo) {
+                // Extract network name - handle various formats
+                let networkName = 'Testnet';
+                if (typeof networkInfo === 'string') {
+                  networkName = networkInfo;
+                } else if (typeof networkInfo.name === 'string') {
+                  networkName = networkInfo.name;
+                } else if (typeof networkInfo.chainId === 'number') {
+                  // Movement Bardock Testnet chainId = 250
+                  networkName = networkInfo.chainId === 250 ? 'Testnet' : 'Mainnet';
+                }
+
+                const isTestnet =
+                  networkName.toLowerCase().includes('testnet') ||
+                  networkName.toLowerCase().includes('bardock') ||
+                  networkName.toLowerCase().includes('movement');
+                setNetwork({ name: isTestnet ? 'Testnet' : networkName });
+              } else {
+                setNetwork({ name: 'Testnet' });
+              }
+            } catch (e) {
+              console.log('Failed to get network:', e);
+              setNetwork({ name: 'Testnet' });
+            }
           }
         } else if (walletName === 'Petra' && (window as any).petra) {
           const petra = (window as any).petra;
@@ -120,6 +154,21 @@ export function WalletProvider({ children }: WalletProviderProps) {
               },
             });
             setConnected(true);
+
+            // Get network info from Petra
+            try {
+              const networkInfo = await petra.network?.();
+              if (networkInfo) {
+                const networkName = networkInfo.name || networkInfo;
+                const isTestnet =
+                  typeof networkName === 'string' && networkName.toLowerCase().includes('testnet');
+                setNetwork({ name: isTestnet ? 'Testnet' : networkName });
+              } else {
+                setNetwork({ name: 'Testnet' });
+              }
+            } catch {
+              setNetwork({ name: 'Testnet' });
+            }
           }
         }
       } catch (error) {
@@ -145,6 +194,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
     setAccount(null);
     setConnected(false);
+    setNetwork(null);
   }, [nightlyWallet]);
 
   const signAndSubmitTransaction = useCallback(
@@ -182,7 +232,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     connected,
     connecting,
     account,
-    network: { name: 'Movement Bardock Testnet' },
+    network,
     wallets,
     connect,
     disconnect,
