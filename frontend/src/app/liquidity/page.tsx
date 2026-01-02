@@ -67,14 +67,12 @@ export default function LiquidityPage() {
   } = useQuery({
     queryKey: ['liquidity-pool-reserves'],
     queryFn: () => fetchPoolReserves(),
-    enabled: connected,
     refetchInterval: 20000,
   });
 
   const { data: isPoolInitialized } = useQuery({
     queryKey: ['pool-exists'],
     queryFn: () => poolExists(),
-    enabled: connected,
   });
 
   const amountIn = useMemo(() => {
@@ -164,19 +162,6 @@ export default function LiquidityPage() {
     toast,
     refetchPool,
   ]);
-
-  if (!connected) {
-    return (
-      <Container maxW="container.md" py={10}>
-        <Center>
-          <VStack spacing={4}>
-            <Heading size="lg">Liquidity Pool</Heading>
-            <Text color="gray.500">Please connect your wallet to swap tokens.</Text>
-          </VStack>
-        </Center>
-      </Container>
-    );
-  }
 
   return (
     <Container maxW="container.xl" py={10}>

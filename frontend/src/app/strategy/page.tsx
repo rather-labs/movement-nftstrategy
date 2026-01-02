@@ -51,7 +51,6 @@ export default function StrategyDashboard() {
   const { data: poolReserves, isLoading: poolLoading } = useQuery({
     queryKey: ['strategy-pool-reserves'],
     queryFn: () => fetchPoolReserves(),
-    enabled: connected,
     refetchInterval: 30000,
   });
 
@@ -79,7 +78,6 @@ export default function StrategyDashboard() {
   const { data: strategyMetrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['strategy-metrics'],
     queryFn: () => fetchStrategyMetrics(),
-    enabled: connected,
     refetchInterval: 60000,
   });
 
@@ -124,19 +122,6 @@ export default function StrategyDashboard() {
       setIsMintingRather(false);
     }
   }, [currentAddress, signAndSubmitTransaction, toast, refetchRather]);
-
-  if (!connected) {
-    return (
-      <Container maxW="container.md" py={10}>
-        <Center>
-          <VStack spacing={4}>
-            <Heading size="lg">Strategy Dashboard</Heading>
-            <Text color="gray.500">Please connect your wallet to view strategy details.</Text>
-          </VStack>
-        </Center>
-      </Container>
-    );
-  }
 
   return (
     <Container maxW="container.xl" py={10}>

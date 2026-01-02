@@ -270,19 +270,6 @@ export default function MarketplacePage() {
     refetchNfts,
   ]);
 
-  if (!connected) {
-    return (
-      <Container maxW="container.md" py={10}>
-        <Center>
-          <VStack spacing={4}>
-            <Heading size="lg">NFT Marketplace</Heading>
-            <Text color="gray.500">Please connect your wallet to use the marketplace.</Text>
-          </VStack>
-        </Center>
-      </Container>
-    );
-  }
-
   return (
     <Container maxW="container.xl" py={10}>
       <VStack spacing={8} align="stretch">
