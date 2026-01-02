@@ -1,0 +1,127 @@
+'use client';
+
+import {
+  Button,
+  Flex,
+  Tag,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  MenuDivider,
+  IconButton,
+  Link,
+  useToast,
+  Box,
+  type ButtonProps,
+} from '@chakra-ui/react';
+import { ChevronDownIcon, ExternalLinkIcon, CopyIcon } from '@chakra-ui/icons';
+import { useWallet } from '@/lib/wallet-context';
+import { WalletSelectionModal } from './WalletSelectionModal';
+import { getAccountExplorerLink } from '@/utils/explorer-links';
+
+type ConnectWalletButtonProps = ButtonProps & { children?: React.ReactNode };
+
+export const ConnectWalletButton = (buttonProps: ConnectWalletButtonProps) => {
+  const { children } = buttonProps;
+  const toast = useToast();
+  const { account, connected, disconnect, network } = useWallet();
+
+  const currentAddress = account?.address?.toString() || null;
+
+  const copyAddress = () => {
+    if (currentAddress) {
+      navigator.clipboard.writeText(currentAddress);
+      toast({
+        title: 'Address copied',
+        description: 'Wallet address copied to clipboard',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+        position: 'bottom-right',
+      });
+    }
+  };
+
+  const truncateMiddle = (str: string | null) => {
+    if (!str) return '';
+    if (str.length <= 12) return str;
+    return `${str.slice(0, 6)}...${str.slice(-4)}`;
+  };
+
+  // Movement Testnet chainId = 250
+  const isTestnet = network?.chainId === 250;
+  const networkLabel = isTestnet ? 'Testnet' : 'Mainnet';
+  const networkColor = isTestnet ? 'purple' : 'blue';
+
+  return connected && currentAddress ? (
+    <Menu>
+      <Flex align="center" gap={0}>
+        <Link
+          href={getAccountExplorerLink(currentAddress)}
+          target="_blank"
+          _hover={{ textDecoration: 'none' }}
+        >
+          <Button
+            variant="ghost"
+            size="md"
+            rightIcon={<ChevronDownIcon visibility="hidden" />}
+            _hover={{ bg: 'bg.subtle' }}
+          >
+            <Flex align="center" gap={2}>
+              <Box
+                fontSize="sm"
+                fontFamily="mono"
+                width="140px"
+                overflow="hidden"
+                textOverflow="ellipsis"
+                color="text.primary"
+              >
+                {truncateMiddle(currentAddress)}
+              </Box>
+              <Tag size="sm" colorScheme={networkColor} borderRadius="full">
+                {networkLabel}
+              </Tag>
+            </Flex>
+          </Button>
+        </Link>
+        <MenuButton
+          as={IconButton}
+          variant="ghost"
+          icon={<ChevronDownIcon />}
+          aria-label="Wallet options"
+          size="md"
+          _hover={{ bg: 'bg.subtle' }}
+        />
+      </Flex>
+      <MenuList>
+        <MenuItem icon={<CopyIcon />} onClick={copyAddress}>
+          Copy Address
+        </MenuItem>
+        <MenuItem
+          icon={<ExternalLinkIcon />}
+          as={Link}
+          href={getAccountExplorerLink(currentAddress)}
+          target="_blank"
+          _hover={{ textDecoration: 'none' }}
+        >
+          View in Explorer
+        </MenuItem>
+        <MenuDivider />
+        <MenuItem
+          onClick={() => disconnect()}
+          color="red.500"
+          data-testid="disconnect-wallet-address-button"
+        >
+          Disconnect Wallet
+        </MenuItem>
+      </MenuList>
+    </Menu>
+  ) : (
+    <WalletSelectionModal>
+      <Button size="md" colorScheme="purple" data-testid="wallet-connect-button" {...buttonProps}>
+        {children || 'Connect Wallet'}
+      </Button>
+    </WalletSelectionModal>
+  );
+};
