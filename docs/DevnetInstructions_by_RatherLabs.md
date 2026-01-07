@@ -105,13 +105,19 @@ movement account list --profile local-dev
 movement account balance --account 0x{ACCOUNT} --profile local-dev
 ```
 
-- Create account
+- Create different account
 
-You can create a local account using a wallet you already created in your testing wallet (e.g. Nighly), therefore working with the private key associated to it, or create a new private and public key and derive the address (first option is faster).
+You can create another local account using a wallet you already created in your testing wallet (e.g. Nighly), therefore working with the private key associated to it, or create a new private and public key and derive the address (first option is faster).
 
 ```bash
-movement account create --profile local-dev --account 0x{ACCOUNT}
+movement init \
+--network custom \
+--rest-url http://127.0.0.1:30731/v1 \
+--faucet-url http://127.0.0.1:30732 \
+--profile local-dev-2
 ```
+
+Provide the private key when requested. The new account should be displayed in `config.yaml` file.
 
 # Publish Module
 
@@ -131,6 +137,30 @@ movement move publish --profile local-dev --assume-yes --bytecode-version 6
 ```
 
 Not specifying the correct `bytecode-version` will make the command fail with `CODE_DESERIALIZATION_ERROR`
+
+# Stop / Restart Network
+
+If you want to stop the local devnet run the following commands:
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose/movement-full-node/docker-compose.yml \
+  -f docker/compose/movement-full-node/docker-compose.local.yml \
+  -f docker/compose/movement-full-node/docker-compose.da-sequencer.yml \
+  -f docker/compose/movement-full-node/docker-compose.faucet.yml \
+  down
+```
+
+To restart run:
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose/movement-full-node/docker-compose.yml \
+  -f docker/compose/movement-full-node/docker-compose.local.yml \
+  -f docker/compose/movement-full-node/docker-compose.da-sequencer.yml \
+  -f docker/compose/movement-full-node/docker-compose.faucet.yml \
+  up -d
+```
 
 ---
 
