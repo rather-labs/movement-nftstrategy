@@ -121,6 +121,51 @@ module nft_strategy_addr::pool {
         );
     }
 
+    /// Update the protocol fee (only fee_recipient can call)
+    public entry fun set_fee_bps<X, Y>(caller: &signer, new_fee_bps: u64) acquires Pool {
+        let pool_addr = get_pool_address<X, Y>();
+        assert!(
+            exists<Pool<X, Y>>(pool_addr),
+            errors::pool_not_exists()
+        );
+
+        let pool = borrow_global_mut<Pool<X, Y>>(pool_addr);
+        let caller_addr = signer::address_of(caller);
+
+        // Only fee_recipient can update fee
+        assert!(caller_addr == pool.fee_recipient, errors::not_authorized());
+
+        // Validate new fee
+        assert!(new_fee_bps <= MAX_FEE_BPS, errors::invalid_fee_percentage());
+
+        pool.fee_bps = new_fee_bps;
+    }
+
+    /// Update the fee recipient (only current fee_recipient can call)
+    public entry fun set_fee_recipient<X, Y>(
+        caller: &signer, new_fee_recipient: address
+    ) acquires Pool {
+        let pool_addr = get_pool_address<X, Y>();
+        assert!(
+            exists<Pool<X, Y>>(pool_addr),
+            errors::pool_not_exists()
+        );
+
+        let pool = borrow_global_mut<Pool<X, Y>>(pool_addr);
+        let caller_addr = signer::address_of(caller);
+
+        // Only current fee_recipient can transfer
+        assert!(caller_addr == pool.fee_recipient, errors::not_authorized());
+
+        // Validate new recipient (if fee_bps > 0, recipient must be non-zero)
+        assert!(
+            pool.fee_bps == 0 || new_fee_recipient != ZERO_ADDRESS,
+            errors::invalid_fee_recipient()
+        );
+
+        pool.fee_recipient = new_fee_recipient;
+    }
+
     public fun add_liquidity<X, Y>(
         account: &signer, asset_x: FungibleAsset, asset_y: FungibleAsset
     ): FungibleAsset acquires Pool, PoolEvents {
@@ -398,6 +443,75 @@ module nft_strategy_addr::pool {
         (pool.fee_recipient, pool.fee_bps)
     }
 
+    #[view]
+    /// Quote a swap from X to Y with full fee breakdown
+    /// Returns: (amount_out, protocol_fee, lp_fee, amount_in_after_protocol_fee)
+    public fun quote_swap_x_to_y<X, Y>(amount_in: u64): (u64, u64, u64, u64) acquires Pool {
+        let pool_addr = get_pool_address<X, Y>();
+        if (!exists<Pool<X, Y>>(pool_addr)) {
+            return (0, 0, 0, 0)
+        };
+
+        let pool = borrow_global<Pool<X, Y>>(pool_addr);
+
+        // Return zeros if pool has no liquidity
+        if (pool.reserve_x == 0 || pool.reserve_y == 0) {
+            return (0, 0, 0, 0)
+        };
+
+        // Protocol fee (treasury)
+        let protocol_fee = calculate_fee(amount_in, pool.fee_bps);
+        let amount_after_protocol_fee = amount_in - protocol_fee;
+
+        // LP fee is implicit in get_amount_out (0.3% = 3/1000)
+        // LP fee = amount_after_protocol_fee * 3 / 1000
+        let lp_fee = math::safe_mul_div(amount_after_protocol_fee, 3, 1000);
+
+        // Calculate output
+        let amount_out =
+            math::get_amount_out(
+                amount_after_protocol_fee, pool.reserve_x, pool.reserve_y
+            );
+
+        (
+            amount_out, protocol_fee, lp_fee, amount_after_protocol_fee
+        )
+    }
+
+    #[view]
+    /// Quote a swap from Y to X with full fee breakdown
+    /// Returns: (amount_out, protocol_fee, lp_fee, amount_in_after_protocol_fee)
+    public fun quote_swap_y_to_x<X, Y>(amount_in: u64): (u64, u64, u64, u64) acquires Pool {
+        let pool_addr = get_pool_address<X, Y>();
+        if (!exists<Pool<X, Y>>(pool_addr)) {
+            return (0, 0, 0, 0)
+        };
+
+        let pool = borrow_global<Pool<X, Y>>(pool_addr);
+
+        // Return zeros if pool has no liquidity
+        if (pool.reserve_x == 0 || pool.reserve_y == 0) {
+            return (0, 0, 0, 0)
+        };
+
+        // Protocol fee (treasury)
+        let protocol_fee = calculate_fee(amount_in, pool.fee_bps);
+        let amount_after_protocol_fee = amount_in - protocol_fee;
+
+        // LP fee is implicit in get_amount_out (0.3% = 3/1000)
+        let lp_fee = math::safe_mul_div(amount_after_protocol_fee, 3, 1000);
+
+        // Calculate output
+        let amount_out =
+            math::get_amount_out(
+                amount_after_protocol_fee, pool.reserve_y, pool.reserve_x
+            );
+
+        (
+            amount_out, protocol_fee, lp_fee, amount_after_protocol_fee
+        )
+    }
+
     /// Calculate fee amount from input amount
     /// fee_bps: fee in basis points (100 bps = 1%)
     fun calculate_fee(amount: u64, fee_bps: u64): u64 {
@@ -509,6 +623,12 @@ module nft_strategy_addr::pool {
     }
 
     // Entry functions
+    public entry fun create_pool_entry<X, Y>(
+        account: &signer, fee_recipient: address, fee_bps: u64
+    ) {
+        create_pool<X, Y>(account, fee_recipient, fee_bps);
+    }
+
     public entry fun add_liquidity_entry<X, Y>(
         account: &signer, amount_x: u64, amount_y: u64
     ) acquires Pool, PoolEvents {
