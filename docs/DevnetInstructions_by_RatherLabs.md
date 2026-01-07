@@ -119,6 +119,14 @@ movement init \
 
 Provide the private key when requested. The new account should be displayed in `config.yaml` file.
 
+# Fund with Faucet
+
+To fund an address with the faucet use the following command:
+
+```bash
+movement account fund-with-faucet --profile local-dev --amount 100000000
+```
+
 # Publish Module
 
 Pin the framework to match the node's commit — update your Move.toml to use the same aptos-core revision as the running node (the framework docs mention 9dfc8e7a3d622597dfd81cc4ba480a5377f87a41 for "elsa"):
@@ -160,6 +168,20 @@ docker compose --env-file .env \
   -f docker/compose/movement-full-node/docker-compose.da-sequencer.yml \
   -f docker/compose/movement-full-node/docker-compose.faucet.yml \
   up -d
+```
+
+## Remove Persisted State
+
+If you wish to remove persisted network state, proceed to remove the `.movement` directory:
+
+```bash
+sudo rm -rf /home/mauro/rather/movement/movement/.movement
+```
+
+Then re-fund your address with the faucet:
+
+```bash
+movement account fund-with-faucet --profile local-dev --amount 100000000
 ```
 
 ---
