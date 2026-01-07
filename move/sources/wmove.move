@@ -86,6 +86,12 @@ module nft_strategy_addr::wmove {
         } else { 0 }
     }
 
+    #[view]
+    /// Returns the WMOVE balance for a given owner address
+    public fun balance_of(owner: address): u64 {
+        primary_fungible_store::balance(owner, get_metadata())
+    }
+
     // ============ Core Functions ============
 
     /// Wrap native MOVE into WMOVE

@@ -67,6 +67,11 @@ module nft_strategy_addr::rather_token {
         fungible_asset::burn(&token_ref.burn_ref, fa);
     }
 
+    #[view]
+    public fun balance_of(owner: address): u64 {
+        primary_fungible_store::balance(owner, get_metadata())
+    }
+
     // Entry functions for CLI access
     public entry fun mint_entry(admin: &signer, to: address, amount: u64) acquires RatherTokenRef {
         mint(admin, to, amount);
