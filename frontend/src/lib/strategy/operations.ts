@@ -105,6 +105,19 @@ export async function fetchRatherTokenBalance(address: string): Promise<number> 
 }
 
 /**
+ * Get WMOVE balance for an address
+ */
+export async function fetchWmoveBalance(address: string): Promise<number> {
+  try {
+    const result = await viewFunction<[string]>(WMOVE_FUNCTIONS.BALANCE_OF, [], [address]);
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error fetching WMOVE balance:', error);
+    return 0;
+  }
+}
+
+/**
  * Get LP token balance for an address
  */
 export async function fetchLpTokenBalance(address: string): Promise<number> {

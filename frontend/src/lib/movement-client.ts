@@ -95,3 +95,21 @@ export async function viewFunction<T>(
 
   return result as T;
 }
+
+/**
+ * Get native MOVE balance for an address
+ * Returns balance in octas (smallest unit)
+ */
+export async function fetchNativeMoveBalance(
+  address: string,
+  network: 'testnet' | 'mainnet' = DEFAULT_NETWORK
+): Promise<number> {
+  try {
+    const client = getAptosClient(network);
+    const balance = await client.getAccountAPTAmount({ accountAddress: address });
+    return balance;
+  } catch (error) {
+    console.error('Error fetching native MOVE balance:', error);
+    return 0;
+  }
+}

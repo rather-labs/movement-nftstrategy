@@ -34,10 +34,12 @@ import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
 import {
   fetchPoolReserves,
   fromOnChainAmount,
+  toOnChainAmount,
   poolExists,
   buildCreatePoolTransaction,
 } from '@/lib/pool/operations';
 import { fetchMarketplaceInfo, isMarketplaceInitialized } from '@/lib/marketplace/operations';
+import { buildMintRatherTokenTransaction } from '@/lib/strategy/operations';
 import { waitForTransaction } from '@/lib/movement-client';
 
 export default function AdminUtilitiesPage() {
@@ -47,6 +49,8 @@ export default function AdminUtilitiesPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatingPool, setIsCreatingPool] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
+  const [mintAmount, setMintAmount] = useState('');
 
   // Check if current user is the admin
   const isAdmin = useMemo(() => {
@@ -157,6 +161,65 @@ export default function AdminUtilitiesPage() {
     }
   }, [currentAddress, signAndSubmitTransaction, toast, refetchPoolExists, refetchPool]);
 
+  // Handle mint RATHER tokens
+  const handleMintRather = useCallback(async () => {
+    if (!currentAddress) {
+      toast({
+        title: 'Connect wallet',
+        description: 'Please connect your wallet first.',
+        status: 'warning',
+      });
+      return;
+    }
+
+    const parsedAmount = parseFloat(mintAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Please enter a valid amount to mint.',
+        status: 'warning',
+      });
+      return;
+    }
+
+    setIsMinting(true);
+    try {
+      const amountOnChain = toOnChainAmount(parsedAmount);
+      const tx = buildMintRatherTokenTransaction(MODULE_ADDRESS, amountOnChain);
+
+      const result = await signAndSubmitTransaction(tx);
+      const txHash = result.hash;
+
+      toast({
+        title: 'Transaction submitted',
+        description: `Minting ${parsedAmount} RATHER tokens...`,
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(txHash);
+
+      toast({
+        title: 'Tokens minted successfully!',
+        description: `${parsedAmount} RATHER tokens minted to admin address.`,
+        status: 'success',
+        duration: 5000,
+      });
+
+      setMintAmount('');
+    } catch (error: any) {
+      console.error('Mint error:', error);
+      toast({
+        title: 'Failed to mint tokens',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsMinting(false);
+    }
+  }, [currentAddress, mintAmount, signAndSubmitTransaction, toast]);
+
   if (!connected) {
     return (
       <Container maxW="container.md" py={10}>
@@ -266,6 +329,44 @@ export default function AdminUtilitiesPage() {
                   </Badge>
                 )}
               </HStack>
+            </VStack>
+          </CardBody>
+        </Card>
+
+        {/* Mint RATHER Token Section */}
+        <Card>
+          <CardHeader>
+            <Heading size="md">Mint RATHER Tokens</Heading>
+          </CardHeader>
+          <CardBody>
+            <VStack align="start" spacing={4}>
+              <Text fontSize="sm" color="gray.600">
+                Mint new RATHER tokens to the admin address. Only the contract admin can mint
+                tokens.
+              </Text>
+              <FormControl>
+                <FormLabel>Amount to Mint</FormLabel>
+                <NumberInput
+                  value={mintAmount}
+                  onChange={(value) => setMintAmount(value)}
+                  min={0}
+                  precision={8}
+                >
+                  <NumberInputField placeholder="Enter amount (e.g., 1000)" />
+                </NumberInput>
+                <FormHelperText>
+                  Tokens will be minted to: {MODULE_ADDRESS.slice(0, 12)}...
+                  {MODULE_ADDRESS.slice(-8)}
+                </FormHelperText>
+              </FormControl>
+              <Button
+                colorScheme="green"
+                onClick={handleMintRather}
+                isLoading={isMinting}
+                isDisabled={!mintAmount || parseFloat(mintAmount) <= 0}
+              >
+                Mint RATHER
+              </Button>
             </VStack>
           </CardBody>
         </Card>

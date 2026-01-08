@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
+  AlertIcon,
   Badge,
   Box,
   Button,
@@ -14,6 +16,7 @@ import {
   Flex,
   FormControl,
   FormLabel,
+  FormHelperText,
   Heading,
   HStack,
   Link,
@@ -22,6 +25,15 @@ import {
   SimpleGrid,
   Spinner,
   Stack,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Text,
   useToast,
   Center,
@@ -40,11 +52,14 @@ import {
   buildSwapWmoveToRatherTransaction,
   buildWrapMoveTransaction,
   buildUnwrapMoveTransaction,
+  buildAddLiquidityTransaction,
+  buildRemoveLiquidityTransaction,
   toOnChainAmount,
   fromOnChainAmount,
   poolExists,
 } from '@/lib/pool/operations';
-import { waitForTransaction } from '@/lib/movement-client';
+import { fetchLpTokenBalance, fetchWmoveBalance } from '@/lib/strategy/operations';
+import { waitForTransaction, fetchNativeMoveBalance } from '@/lib/movement-client';
 
 type SwapDirection = 'wmove-to-rather' | 'rather-to-wmove';
 
@@ -55,10 +70,25 @@ export default function LiquidityPage() {
   const currentAddress = useCurrentAddress();
   const { signAndSubmitTransaction, connected } = useWallet();
 
+  // Swap state
   const [swapDirection, setSwapDirection] = useState<SwapDirection>('wmove-to-rather');
   const [swapAmount, setSwapAmount] = useState('');
   const [isSwapping, setIsSwapping] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+
+  // Liquidity state
+  const [addAmountRather, setAddAmountRather] = useState('');
+  const [addAmountWmove, setAddAmountWmove] = useState('');
+  const [lastEditedField, setLastEditedField] = useState<'rather' | 'wmove' | null>(null);
+  const [removeAmount, setRemoveAmount] = useState('');
+  const [isAddingLiquidity, setIsAddingLiquidity] = useState(false);
+  const [isRemovingLiquidity, setIsRemovingLiquidity] = useState(false);
+
+  // Wrap/Unwrap state
+  const [wrapAmount, setWrapAmount] = useState('');
+  const [unwrapAmount, setUnwrapAmount] = useState('');
+  const [isWrapping, setIsWrapping] = useState(false);
+  const [isUnwrapping, setIsUnwrapping] = useState(false);
 
   const {
     data: poolReserves,
@@ -74,6 +104,94 @@ export default function LiquidityPage() {
     queryKey: ['pool-exists'],
     queryFn: () => poolExists(),
   });
+
+  // Fetch user's LP token balance
+  const {
+    data: lpBalance = 0,
+    isLoading: lpBalanceLoading,
+    refetch: refetchLpBalance,
+  } = useQuery({
+    queryKey: ['lp-balance', currentAddress],
+    queryFn: () => fetchLpTokenBalance(currentAddress!),
+    enabled: !!currentAddress,
+    refetchInterval: 15000,
+  });
+
+  // Fetch user's WMOVE balance
+  const {
+    data: wmoveBalance = 0,
+    isLoading: wmoveBalanceLoading,
+    refetch: refetchWmoveBalance,
+  } = useQuery({
+    queryKey: ['wmove-balance', currentAddress],
+    queryFn: () => fetchWmoveBalance(currentAddress!),
+    enabled: !!currentAddress,
+    refetchInterval: 15000,
+  });
+
+  // Fetch user's native MOVE balance
+  const {
+    data: moveBalance = 0,
+    isLoading: moveBalanceLoading,
+    refetch: refetchMoveBalance,
+  } = useQuery({
+    queryKey: ['move-balance', currentAddress],
+    queryFn: () => fetchNativeMoveBalance(currentAddress!),
+    enabled: !!currentAddress,
+    refetchInterval: 15000,
+  });
+
+  const lpBalanceDisplay = fromOnChainAmount(lpBalance);
+  const wmoveBalanceDisplay = fromOnChainAmount(wmoveBalance);
+  const moveBalanceDisplay = fromOnChainAmount(moveBalance);
+
+  // Calculate price ratio from pool reserves
+  const priceRatio = useMemo(() => {
+    if (!poolReserves || poolReserves.reserveX === 0 || poolReserves.reserveY === 0) {
+      return null;
+    }
+    // Price of 1 RATHER in terms of WMOVE = reserveY / reserveX
+    return poolReserves.reserveY / poolReserves.reserveX;
+  }, [poolReserves]);
+
+  // Auto-balance handlers for liquidity inputs
+  const handleRatherAmountChange = useCallback(
+    (value: string) => {
+      setAddAmountRather(value);
+      setLastEditedField('rather');
+
+      // Auto-calculate WMOVE amount based on pool ratio
+      if (priceRatio !== null) {
+        const parsedRather = parseFloat(value);
+        if (!isNaN(parsedRather) && parsedRather > 0) {
+          const wmoveAmount = parsedRather * priceRatio;
+          setAddAmountWmove(wmoveAmount.toFixed(8));
+        } else {
+          setAddAmountWmove('');
+        }
+      }
+    },
+    [priceRatio]
+  );
+
+  const handleWmoveAmountChange = useCallback(
+    (value: string) => {
+      setAddAmountWmove(value);
+      setLastEditedField('wmove');
+
+      // Auto-calculate RATHER amount based on pool ratio
+      if (priceRatio !== null && priceRatio > 0) {
+        const parsedWmove = parseFloat(value);
+        if (!isNaN(parsedWmove) && parsedWmove > 0) {
+          const ratherAmount = parsedWmove / priceRatio;
+          setAddAmountRather(ratherAmount.toFixed(8));
+        } else {
+          setAddAmountRather('');
+        }
+      }
+    },
+    [priceRatio]
+  );
 
   const amountIn = useMemo(() => {
     const parsed = parseFloat(swapAmount);
@@ -162,6 +280,284 @@ export default function LiquidityPage() {
     toast,
     refetchPool,
   ]);
+
+  // Computed values for liquidity
+  const addAmountRatherOnChain = useMemo(() => {
+    const parsed = parseFloat(addAmountRather);
+    return isNaN(parsed) || parsed <= 0 ? 0 : toOnChainAmount(parsed);
+  }, [addAmountRather]);
+
+  const addAmountWmoveOnChain = useMemo(() => {
+    const parsed = parseFloat(addAmountWmove);
+    return isNaN(parsed) || parsed <= 0 ? 0 : toOnChainAmount(parsed);
+  }, [addAmountWmove]);
+
+  const removeAmountOnChain = useMemo(() => {
+    const parsed = parseFloat(removeAmount);
+    return isNaN(parsed) || parsed <= 0 ? 0 : toOnChainAmount(parsed);
+  }, [removeAmount]);
+
+  const isAddLiquidityDisabled =
+    !currentAddress ||
+    !isPoolInitialized ||
+    addAmountRatherOnChain <= 0 ||
+    addAmountWmoveOnChain <= 0 ||
+    isAddingLiquidity;
+
+  const isRemoveLiquidityDisabled =
+    !currentAddress ||
+    !isPoolInitialized ||
+    removeAmountOnChain <= 0 ||
+    removeAmountOnChain > lpBalance ||
+    isRemovingLiquidity;
+
+  const handleAddLiquidity = useCallback(async () => {
+    if (!currentAddress || addAmountRatherOnChain <= 0 || addAmountWmoveOnChain <= 0) return;
+
+    setIsAddingLiquidity(true);
+    try {
+      const txPayload = buildAddLiquidityTransaction(addAmountRatherOnChain, addAmountWmoveOnChain);
+      const response = await signAndSubmitTransaction(txPayload);
+
+      toast({
+        title: 'Transaction submitted',
+        description: 'Adding liquidity...',
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(response.hash);
+
+      toast({
+        title: 'Liquidity added successfully!',
+        description: (
+          <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
+            View on Explorer <ExternalLinkIcon mx="2px" />
+          </Link>
+        ),
+        status: 'success',
+        duration: 10000,
+      });
+
+      setAddAmountRather('');
+      setAddAmountWmove('');
+      void refetchPool();
+      void refetchLpBalance();
+    } catch (error: any) {
+      toast({
+        title: 'Add liquidity failed',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsAddingLiquidity(false);
+    }
+  }, [
+    currentAddress,
+    addAmountRatherOnChain,
+    addAmountWmoveOnChain,
+    signAndSubmitTransaction,
+    toast,
+    refetchPool,
+    refetchLpBalance,
+  ]);
+
+  const handleRemoveLiquidity = useCallback(async () => {
+    if (!currentAddress || removeAmountOnChain <= 0) return;
+
+    if (removeAmountOnChain > lpBalance) {
+      toast({
+        title: 'Insufficient LP tokens',
+        description: `You only have ${lpBalanceDisplay.toFixed(8)} LP tokens`,
+        status: 'warning',
+      });
+      return;
+    }
+
+    setIsRemovingLiquidity(true);
+    try {
+      const txPayload = buildRemoveLiquidityTransaction(removeAmountOnChain);
+      const response = await signAndSubmitTransaction(txPayload);
+
+      toast({
+        title: 'Transaction submitted',
+        description: 'Removing liquidity...',
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(response.hash);
+
+      toast({
+        title: 'Liquidity removed successfully!',
+        description: (
+          <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
+            View on Explorer <ExternalLinkIcon mx="2px" />
+          </Link>
+        ),
+        status: 'success',
+        duration: 10000,
+      });
+
+      setRemoveAmount('');
+      void refetchPool();
+      void refetchLpBalance();
+    } catch (error: any) {
+      toast({
+        title: 'Remove liquidity failed',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsRemovingLiquidity(false);
+    }
+  }, [
+    currentAddress,
+    removeAmountOnChain,
+    lpBalance,
+    lpBalanceDisplay,
+    signAndSubmitTransaction,
+    toast,
+    refetchPool,
+    refetchLpBalance,
+  ]);
+
+  const handleMaxRemove = useCallback(() => {
+    setRemoveAmount(lpBalanceDisplay.toString());
+  }, [lpBalanceDisplay]);
+
+  // Wrap MOVE to WMOVE
+  const handleWrap = useCallback(async () => {
+    if (!currentAddress) return;
+
+    const parsedAmount = parseFloat(wrapAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Please enter a valid amount to wrap.',
+        status: 'warning',
+      });
+      return;
+    }
+
+    setIsWrapping(true);
+    try {
+      const amountOnChain = toOnChainAmount(parsedAmount);
+      const txPayload = buildWrapMoveTransaction(amountOnChain);
+      const response = await signAndSubmitTransaction(txPayload);
+
+      toast({
+        title: 'Transaction submitted',
+        description: 'Wrapping MOVE to WMOVE...',
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(response.hash);
+
+      toast({
+        title: 'Wrap successful!',
+        description: (
+          <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
+            View on Explorer <ExternalLinkIcon mx="2px" />
+          </Link>
+        ),
+        status: 'success',
+        duration: 10000,
+      });
+
+      setWrapAmount('');
+      void refetchMoveBalance();
+      void refetchWmoveBalance();
+    } catch (error: any) {
+      toast({
+        title: 'Wrap failed',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsWrapping(false);
+    }
+  }, [
+    currentAddress,
+    wrapAmount,
+    signAndSubmitTransaction,
+    toast,
+    refetchMoveBalance,
+    refetchWmoveBalance,
+  ]);
+
+  // Unwrap WMOVE to MOVE
+  const handleUnwrap = useCallback(async () => {
+    if (!currentAddress) return;
+
+    const parsedAmount = parseFloat(unwrapAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Please enter a valid amount to unwrap.',
+        status: 'warning',
+      });
+      return;
+    }
+
+    setIsUnwrapping(true);
+    try {
+      const amountOnChain = toOnChainAmount(parsedAmount);
+      const txPayload = buildUnwrapMoveTransaction(amountOnChain);
+      const response = await signAndSubmitTransaction(txPayload);
+
+      toast({
+        title: 'Transaction submitted',
+        description: 'Unwrapping WMOVE to MOVE...',
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(response.hash);
+
+      toast({
+        title: 'Unwrap successful!',
+        description: (
+          <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
+            View on Explorer <ExternalLinkIcon mx="2px" />
+          </Link>
+        ),
+        status: 'success',
+        duration: 10000,
+      });
+
+      setUnwrapAmount('');
+      void refetchMoveBalance();
+      void refetchWmoveBalance();
+    } catch (error: any) {
+      toast({
+        title: 'Unwrap failed',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsUnwrapping(false);
+    }
+  }, [
+    currentAddress,
+    unwrapAmount,
+    signAndSubmitTransaction,
+    toast,
+    refetchMoveBalance,
+    refetchWmoveBalance,
+  ]);
+
+  // MAX handlers for wrap/unwrap
+  const handleMaxWrap = useCallback(() => {
+    // Leave a small buffer for gas fees (0.1 MOVE)
+    const maxAmount = Math.max(0, moveBalanceDisplay - 0.1);
+    setWrapAmount(maxAmount > 0 ? maxAmount.toFixed(8) : '');
+  }, [moveBalanceDisplay]);
+
+  const handleMaxUnwrap = useCallback(() => {
+    setUnwrapAmount(wmoveBalanceDisplay.toString());
+  }, [wmoveBalanceDisplay]);
 
   return (
     <Container maxW="container.xl" py={10}>
@@ -270,6 +666,300 @@ export default function LiquidityPage() {
               >
                 {swapButtonLabel}
               </Button>
+            </VStack>
+          </CardBody>
+        </Card>
+
+        {/* Add/Remove Liquidity Card */}
+        <Card>
+          <CardHeader>
+            <Heading size="md">Manage Liquidity</Heading>
+          </CardHeader>
+          <CardBody>
+            <VStack spacing={6}>
+              {/* LP Token Balance Display */}
+              <Box width="100%" p={4} bg="purple.50" borderRadius="md" _dark={{ bg: 'purple.900' }}>
+                <Stat>
+                  <StatLabel>Your LP Token Balance</StatLabel>
+                  <StatNumber>
+                    {lpBalanceLoading ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      `${lpBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 8 })} LP`
+                    )}
+                  </StatNumber>
+                  <StatHelpText>LP tokens represent your share of the pool</StatHelpText>
+                </Stat>
+              </Box>
+
+              <Tabs width="100%" variant="enclosed" colorScheme="purple">
+                <TabList>
+                  <Tab>Add Liquidity</Tab>
+                  <Tab>Remove Liquidity</Tab>
+                </TabList>
+
+                <TabPanels>
+                  {/* Add Liquidity Panel */}
+                  <TabPanel px={0}>
+                    <VStack spacing={4}>
+                      <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
+                        Add both RATHER and WMOVE tokens to the pool to receive LP tokens. Amounts
+                        are auto-balanced based on the current pool ratio.
+                      </Text>
+
+                      {priceRatio !== null && (
+                        <Box
+                          width="100%"
+                          p={3}
+                          bg="blue.50"
+                          borderRadius="md"
+                          _dark={{ bg: 'blue.900' }}
+                        >
+                          <Text fontSize="sm" color="blue.700" _dark={{ color: 'blue.200' }}>
+                            Current ratio: 1 RATHER = {priceRatio.toFixed(8)} WMOVE
+                          </Text>
+                        </Box>
+                      )}
+
+                      <FormControl>
+                        <FormLabel>RATHER Amount</FormLabel>
+                        <NumberInput
+                          value={addAmountRather}
+                          onChange={handleRatherAmountChange}
+                          min={0}
+                          precision={8}
+                        >
+                          <NumberInputField placeholder="0.0" />
+                        </NumberInput>
+                      </FormControl>
+
+                      <FormControl>
+                        <FormLabel>WMOVE Amount</FormLabel>
+                        <NumberInput
+                          value={addAmountWmove}
+                          onChange={handleWmoveAmountChange}
+                          min={0}
+                          precision={8}
+                        >
+                          <NumberInputField placeholder="0.0" />
+                        </NumberInput>
+                        <FormHelperText>
+                          Amounts are automatically balanced to match the pool ratio.
+                        </FormHelperText>
+                      </FormControl>
+
+                      <Button
+                        colorScheme="green"
+                        width="100%"
+                        size="lg"
+                        onClick={handleAddLiquidity}
+                        isLoading={isAddingLiquidity}
+                        isDisabled={isAddLiquidityDisabled}
+                      >
+                        Add Liquidity
+                      </Button>
+                    </VStack>
+                  </TabPanel>
+
+                  {/* Remove Liquidity Panel */}
+                  <TabPanel px={0}>
+                    <VStack spacing={4}>
+                      <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
+                        Burn LP tokens to receive your share of RATHER and WMOVE back.
+                      </Text>
+
+                      <FormControl>
+                        <FormLabel>LP Tokens to Remove</FormLabel>
+                        <HStack>
+                          <NumberInput
+                            flex={1}
+                            value={removeAmount}
+                            onChange={(value) => setRemoveAmount(value)}
+                            min={0}
+                            max={lpBalanceDisplay}
+                            precision={8}
+                          >
+                            <NumberInputField placeholder="0.0" />
+                          </NumberInput>
+                          <Button size="sm" onClick={handleMaxRemove} variant="outline">
+                            MAX
+                          </Button>
+                        </HStack>
+                        <FormHelperText>
+                          Available:{' '}
+                          {lpBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 8 })}{' '}
+                          LP
+                        </FormHelperText>
+                      </FormControl>
+
+                      {removeAmountOnChain > lpBalance && (
+                        <Alert status="error" borderRadius="md">
+                          <AlertIcon />
+                          Insufficient LP token balance
+                        </Alert>
+                      )}
+
+                      <Button
+                        colorScheme="red"
+                        width="100%"
+                        size="lg"
+                        onClick={handleRemoveLiquidity}
+                        isLoading={isRemovingLiquidity}
+                        isDisabled={isRemoveLiquidityDisabled}
+                      >
+                        Remove Liquidity
+                      </Button>
+                    </VStack>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            </VStack>
+          </CardBody>
+        </Card>
+
+        {/* Wrap/Unwrap MOVE Card */}
+        <Card>
+          <CardHeader>
+            <Heading size="md">Wrap / Unwrap MOVE</Heading>
+          </CardHeader>
+          <CardBody>
+            <VStack spacing={6}>
+              <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
+                Convert between native MOVE and WMOVE (Wrapped MOVE). WMOVE is required for pool
+                operations.
+              </Text>
+
+              {/* Balance Display */}
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} width="100%">
+                <Box p={3} bg="gray.50" borderRadius="md" _dark={{ bg: 'gray.700' }}>
+                  <Stat size="sm">
+                    <StatLabel>MOVE Balance</StatLabel>
+                    <StatNumber fontSize="lg">
+                      {moveBalanceLoading ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        `${moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} MOVE`
+                      )}
+                    </StatNumber>
+                    <StatHelpText>Native token</StatHelpText>
+                  </Stat>
+                </Box>
+                <Box p={3} bg="blue.50" borderRadius="md" _dark={{ bg: 'blue.900' }}>
+                  <Stat size="sm">
+                    <StatLabel>WMOVE Balance</StatLabel>
+                    <StatNumber fontSize="lg">
+                      {wmoveBalanceLoading ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        `${wmoveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} WMOVE`
+                      )}
+                    </StatNumber>
+                    <StatHelpText>Wrapped token</StatHelpText>
+                  </Stat>
+                </Box>
+              </SimpleGrid>
+
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} width="100%">
+                {/* Wrap Panel */}
+                <Box
+                  p={4}
+                  borderWidth={1}
+                  borderRadius="md"
+                  borderColor="gray.200"
+                  _dark={{ borderColor: 'gray.600' }}
+                >
+                  <VStack spacing={4} align="stretch">
+                    <Heading size="sm">Wrap MOVE → WMOVE</Heading>
+                    <Text fontSize="xs" color="gray.500">
+                      Convert native MOVE tokens to WMOVE for use in the liquidity pool.
+                    </Text>
+                    <FormControl>
+                      <FormLabel fontSize="sm">MOVE Amount</FormLabel>
+                      <HStack>
+                        <NumberInput
+                          flex={1}
+                          value={wrapAmount}
+                          onChange={(value) => setWrapAmount(value)}
+                          min={0}
+                          max={moveBalanceDisplay}
+                          precision={8}
+                          size="sm"
+                        >
+                          <NumberInputField placeholder="0.0" />
+                        </NumberInput>
+                        <Button size="sm" onClick={handleMaxWrap} variant="outline">
+                          MAX
+                        </Button>
+                      </HStack>
+                      <FormHelperText>
+                        Available:{' '}
+                        {moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })}{' '}
+                        MOVE
+                      </FormHelperText>
+                    </FormControl>
+                    <Button
+                      colorScheme="blue"
+                      onClick={handleWrap}
+                      isLoading={isWrapping}
+                      isDisabled={!currentAddress || !wrapAmount || parseFloat(wrapAmount) <= 0}
+                      size="sm"
+                    >
+                      Wrap MOVE
+                    </Button>
+                  </VStack>
+                </Box>
+
+                {/* Unwrap Panel */}
+                <Box
+                  p={4}
+                  borderWidth={1}
+                  borderRadius="md"
+                  borderColor="gray.200"
+                  _dark={{ borderColor: 'gray.600' }}
+                >
+                  <VStack spacing={4} align="stretch">
+                    <Heading size="sm">Unwrap WMOVE → MOVE</Heading>
+                    <Text fontSize="xs" color="gray.500">
+                      Convert WMOVE back to native MOVE tokens.
+                    </Text>
+                    <FormControl>
+                      <FormLabel fontSize="sm">WMOVE Amount</FormLabel>
+                      <HStack>
+                        <NumberInput
+                          flex={1}
+                          value={unwrapAmount}
+                          onChange={(value) => setUnwrapAmount(value)}
+                          min={0}
+                          max={wmoveBalanceDisplay}
+                          precision={8}
+                          size="sm"
+                        >
+                          <NumberInputField placeholder="0.0" />
+                        </NumberInput>
+                        <Button size="sm" onClick={handleMaxUnwrap} variant="outline">
+                          MAX
+                        </Button>
+                      </HStack>
+                      <FormHelperText>
+                        Available:{' '}
+                        {wmoveBalanceDisplay.toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        })}{' '}
+                        WMOVE
+                      </FormHelperText>
+                    </FormControl>
+                    <Button
+                      colorScheme="orange"
+                      onClick={handleUnwrap}
+                      isLoading={isUnwrapping}
+                      isDisabled={!currentAddress || !unwrapAmount || parseFloat(unwrapAmount) <= 0}
+                      size="sm"
+                    >
+                      Unwrap WMOVE
+                    </Button>
+                  </VStack>
+                </Box>
+              </SimpleGrid>
             </VStack>
           </CardBody>
         </Card>
