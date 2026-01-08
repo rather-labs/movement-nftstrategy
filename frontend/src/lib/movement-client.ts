@@ -19,26 +19,36 @@ export const MOVEMENT_CONFIG = {
 // Default to testnet
 export const DEFAULT_NETWORK = 'testnet' as const;
 
-// Singleton Aptos client
+// Client cache with network tracking
 let aptosClient: Aptos | null = null;
+let currentClientNetwork: 'testnet' | 'mainnet' | null = null;
 
 /**
  * Get the Aptos client for Movement network
- * Uses testnet by default
+ * Recreates client if network changes
  */
 export function getAptosClient(network: 'testnet' | 'mainnet' = DEFAULT_NETWORK): Aptos {
   const config = MOVEMENT_CONFIG[network];
 
-  // Create new client if not exists or network changed
-  if (!aptosClient) {
+  // Create new client if not exists OR network changed
+  if (!aptosClient || currentClientNetwork !== network) {
     const aptosConfig = new AptosConfig({
       network: Network.CUSTOM,
       fullnode: config.fullnode,
     });
     aptosClient = new Aptos(aptosConfig);
+    currentClientNetwork = network;
   }
 
   return aptosClient;
+}
+
+/**
+ * Reset client (useful for testing or forced refresh)
+ */
+export function resetAptosClient(): void {
+  aptosClient = null;
+  currentClientNetwork = null;
 }
 
 /**
