@@ -279,6 +279,64 @@ movement move view \
   --profile local-dev
 
 ##################################
+# TOKEN TRANSFERS (local-dev -> local-dev-2)
+##################################
+
+# Get RATHER token metadata address
+RATHER_METADATA=$(movement move view \
+  --function-id "${MY_ADDR}::rather_token::get_metadata" \
+  --profile local-dev | jq -r '.Result[0].inner')
+
+echo "RATHER Metadata: ${RATHER_METADATA}"
+
+# Transfer RATHER tokens from local-dev to local-dev-2 (10 RATHER = 10_00000000)
+movement move run \
+  --function-id "0x1::primary_fungible_store::transfer" \
+  --type-args "0x1::fungible_asset::Metadata" \
+  --args "address:${RATHER_METADATA}" address:"${RECIPIENT_ADDR}" u64:1000000000 \
+  --profile local-dev \
+  --assume-yes
+
+# Verify RATHER transfer
+echo "=== RATHER balances after transfer ==="
+movement move view \
+  --function-id "${MY_ADDR}::rather_token::balance_of" \
+  --args "address:${MY_ADDR}" \
+  --profile local-dev
+
+movement move view \
+  --function-id "${MY_ADDR}::rather_token::balance_of" \
+  --args "address:${RECIPIENT_ADDR}" \
+  --profile local-dev
+
+# Get WMOVE token metadata address
+WMOVE_METADATA=$(movement move view \
+  --function-id "${MY_ADDR}::wmove::get_metadata" \
+  --profile local-dev | jq -r '.Result[0].inner')
+
+echo "WMOVE Metadata: ${WMOVE_METADATA}"
+
+# Transfer WMOVE tokens from local-dev to local-dev-2 (1 WMOVE = 1_00000000)
+movement move run \
+  --function-id "0x1::primary_fungible_store::transfer" \
+  --type-args "0x1::fungible_asset::Metadata" \
+  --args "address:${WMOVE_METADATA}" address:"${RECIPIENT_ADDR}" u64:1000000 \
+  --profile local-dev \
+  --assume-yes
+
+# Verify WMOVE transfer
+echo "=== WMOVE balances after transfer ==="
+movement move view \
+  --function-id "${MY_ADDR}::wmove::balance_of" \
+  --args "address:${MY_ADDR}" \
+  --profile local-dev
+
+movement move view \
+  --function-id "${MY_ADDR}::wmove::balance_of" \
+  --args "address:${RECIPIENT_ADDR}" \
+  --profile local-dev
+
+##################################
 # LIQUIDITY POOL OPERATIONS
 ##################################
 
