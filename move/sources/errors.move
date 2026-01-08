@@ -36,23 +36,24 @@ module nft_strategy_addr::errors {
     // Fee errors
     const EINVALID_FEE_PERCENTAGE: u64 = 22;
     const EINVALID_FEE_RECIPIENT: u64 = 23;
+    const EINVALID_FEE_TOKEN: u64 = 24;
 
     // Marketplace errors
-    const ELISTING_NOT_EXISTS: u64 = 24;
-    const ELISTING_ALREADY_EXISTS: u64 = 25;
-    const EINVALID_PRICE: u64 = 26;
-    const ENFT_NOT_OWNED: u64 = 27;
-    const ENOT_SELLER: u64 = 28;
-    const ESELLER_CANNOT_BUY: u64 = 29;
-    const EMARKETPLACE_NOT_INITIALIZED: u64 = 30;
-    const EMARKETPLACE_ALREADY_INITIALIZED: u64 = 31;
+    const ELISTING_NOT_EXISTS: u64 = 25;
+    const ELISTING_ALREADY_EXISTS: u64 = 26;
+    const EINVALID_PRICE: u64 = 27;
+    const ENFT_NOT_OWNED: u64 = 28;
+    const ENOT_SELLER: u64 = 29;
+    const ESELLER_CANNOT_BUY: u64 = 30;
+    const EMARKETPLACE_NOT_INITIALIZED: u64 = 31;
+    const EMARKETPLACE_ALREADY_INITIALIZED: u64 = 32;
 
     // NFT Collection errors
-    const ECOLLECTION_NOT_EXISTS: u64 = 32;
-    const ECOLLECTION_ALREADY_EXISTS: u64 = 33;
-    const EMAX_SUPPLY_REACHED: u64 = 34;
-    const ENOT_COLLECTION_CREATOR: u64 = 35;
-    const EINVALID_TOKEN_ID: u64 = 36;
+    const ECOLLECTION_NOT_EXISTS: u64 = 33;
+    const ECOLLECTION_ALREADY_EXISTS: u64 = 34;
+    const EMAX_SUPPLY_REACHED: u64 = 35;
+    const ENOT_COLLECTION_CREATOR: u64 = 36;
+    const EINVALID_TOKEN_ID: u64 = 37;
 
     public fun pool_already_exists(): u64 {
         EPOOL_ALREADY_EXISTS
@@ -144,6 +145,10 @@ module nft_strategy_addr::errors {
 
     public fun invalid_fee_recipient(): u64 {
         EINVALID_FEE_RECIPIENT
+    }
+
+    public fun invalid_fee_token(): u64 {
+        EINVALID_FEE_TOKEN
     }
 
     public fun listing_not_exists(): u64 {
