@@ -9,6 +9,8 @@ import {
   TYPE_ARGUMENTS,
   MARKETPLACE_FUNCTIONS,
   NFT_FUNCTIONS,
+  WMOVE_FUNCTIONS,
+  TREASURY_ADDRESS,
 } from '@/constants/contracts';
 import { viewFunction } from '@/lib/movement-client';
 import { InputTransactionData } from '@/lib/wallet-context';
@@ -58,6 +60,36 @@ export function buildBurnRatherTokenTransaction(
 }
 
 // ============ View Functions ============
+
+/**
+ * Get WMOVE balance for the treasury address
+ */
+export async function fetchTreasuryWmoveBalance(): Promise<number> {
+  try {
+    const result = await viewFunction<[string]>(WMOVE_FUNCTIONS.BALANCE_OF, [], [TREASURY_ADDRESS]);
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error fetching treasury WMOVE balance:', error);
+    return 0;
+  }
+}
+
+/**
+ * Get RATHER token balance for the treasury address (burnable balance)
+ */
+export async function fetchTreasuryRatherBalance(): Promise<number> {
+  try {
+    const result = await viewFunction<[string]>(
+      RATHER_TOKEN_FUNCTIONS.BALANCE_OF,
+      [],
+      [TREASURY_ADDRESS]
+    );
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error fetching treasury RATHER balance:', error);
+    return 0;
+  }
+}
 
 /**
  * Get RatherToken balance for an address

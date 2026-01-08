@@ -65,6 +65,7 @@ export const MARKETPLACE_FUNCTIONS = {
 // Pool functions
 export const POOL_FUNCTIONS = {
   CREATE_POOL: buildFunctionId(MODULES.POOL, 'create_pool'),
+  CREATE_POOL_ENTRY: buildFunctionId(MODULES.POOL, 'create_pool_entry'),
   ADD_LIQUIDITY_ENTRY: buildFunctionId(MODULES.POOL, 'add_liquidity_entry'),
   REMOVE_LIQUIDITY_ENTRY: buildFunctionId(MODULES.POOL, 'remove_liquidity_entry'),
   SWAP_X_TO_Y_ENTRY: buildFunctionId(MODULES.POOL, 'swap_x_to_y_entry'),
@@ -95,6 +96,7 @@ export const RATHER_TOKEN_FUNCTIONS = {
   MINT_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'mint_entry'),
   BURN_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'burn_entry'),
   GET_BALANCE: buildFunctionId(MODULES.RATHER_TOKEN, 'get_balance'),
+  BALANCE_OF: buildFunctionId(MODULES.RATHER_TOKEN, 'balance_of'),
   GET_TOTAL_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_supply'),
   GET_METADATA: buildFunctionId(MODULES.RATHER_TOKEN, 'get_metadata'),
 } as const;
@@ -106,6 +108,7 @@ export const WMOVE_FUNCTIONS = {
   GET_METADATA: buildFunctionId(MODULES.WMOVE, 'get_metadata'),
   GET_RESERVE: buildFunctionId(MODULES.WMOVE, 'get_reserve'),
   GET_TOTAL_SUPPLY: buildFunctionId(MODULES.WMOVE, 'get_total_supply'),
+  BALANCE_OF: buildFunctionId(MODULES.WMOVE, 'balance_of'),
 } as const;
 
 // Type arguments for pool operations
@@ -114,3 +117,7 @@ export const TYPE_ARGUMENTS = {
   RATHER_TOKEN: `${MODULE_ADDRESS}::${MODULES.RATHER_TOKEN}::RatherToken`,
   WMOVE: `${MODULE_ADDRESS}::${MODULES.WMOVE}::WMOVE`,
 } as const;
+
+// Treasury address for strategy fees
+export const TREASURY_ADDRESS =
+  '0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b';
