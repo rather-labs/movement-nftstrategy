@@ -12,8 +12,7 @@ nft_strategy_addr = "0xbeef"
 
 [dependencies.AptosFramework]
 git = "https://github.com/movementlabsxyz/aptos-core.git"
-# rev = "movement"
-rev = "9dfc8e7a3d622597dfd81cc4ba480a5377f87a41"
+rev = "movement"
 subdir = "aptos-move/framework/aptos-framework"
 
 [dev-dependencies]
