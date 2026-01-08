@@ -39,9 +39,11 @@ import {
   fetchLpTokenBalance,
   fetchRatherTokenBalance,
   fetchStrategyMetrics,
+  fetchTreasuryWmoveBalance,
+  fetchTreasuryRatherBalance,
 } from '@/lib/strategy/operations';
 import { fetchPoolReserves, fromOnChainAmount, toOnChainAmount } from '@/lib/pool/operations';
-import { MODULE_ADDRESS } from '@/constants/contracts';
+import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
 import { useNftHoldings } from '@/hooks/useNftHoldings';
 import { TokenImage } from '@/components/nft/TokenImage';
 
@@ -63,6 +65,28 @@ export default function StrategyDashboard() {
   } = useQuery({
     queryKey: ['strategy-pool-reserves'],
     queryFn: () => fetchPoolReserves(),
+    refetchInterval: 15000,
+  });
+
+  // Treasury WMOVE balance
+  const {
+    data: treasuryWmove = 0,
+    isLoading: treasuryWmoveLoading,
+    refetch: refetchTreasuryWmove,
+  } = useQuery({
+    queryKey: ['treasury-wmove-balance'],
+    queryFn: () => fetchTreasuryWmoveBalance(),
+    refetchInterval: 15000,
+  });
+
+  // Treasury RATHER balance (burnable)
+  const {
+    data: treasuryRather = 0,
+    isLoading: treasuryRatherLoading,
+    refetch: refetchTreasuryRather,
+  } = useQuery({
+    queryKey: ['treasury-rather-balance'],
+    queryFn: () => fetchTreasuryRatherBalance(),
     refetchInterval: 15000,
   });
 
@@ -102,15 +126,14 @@ export default function StrategyDashboard() {
 
   // Computed values
   const treasuryBalance = useMemo(() => {
-    if (!poolReserves) return 0;
-    return fromOnChainAmount(poolReserves.reserveY); // WMOVE in pool
-  }, [poolReserves]);
+    // Treasury balance is the WMOVE balance of the treasury address
+    return fromOnChainAmount(treasuryWmove);
+  }, [treasuryWmove]);
 
   const burnableBalance = useMemo(() => {
-    // For now, use RATHER reserve as proxy for burnable amount
-    if (!poolReserves) return 0;
-    return fromOnChainAmount(poolReserves.reserveX);
-  }, [poolReserves]);
+    // Burnable balance is the RATHER token balance of the treasury address
+    return fromOnChainAmount(treasuryRather);
+  }, [treasuryRather]);
 
   const floorPrice = useMemo(() => {
     // TODO: Implement floor listing detection via indexer
@@ -131,7 +154,9 @@ export default function StrategyDashboard() {
     void refetchPool();
     void refetchMetrics();
     void refetchRather();
-  }, [refetchPool, refetchMetrics, refetchRather]);
+    void refetchTreasuryWmove();
+    void refetchTreasuryRather();
+  }, [refetchPool, refetchMetrics, refetchRather, refetchTreasuryWmove, refetchTreasuryRather]);
 
   const handleBuyFloor = useCallback(async () => {
     if (!currentAddress) {
@@ -218,19 +243,19 @@ export default function StrategyDashboard() {
                 <Stat>
                   <StatLabel>Treasury Balance</StatLabel>
                   <StatNumber>
-                    {poolLoading ? '—' : `${treasuryBalance.toFixed(3)} WMOVE`}
+                    {treasuryWmoveLoading ? '—' : `${treasuryBalance.toFixed(3)} WMOVE`}
                   </StatNumber>
                   <StatHelpText mt={1} color="text.tertiary">
-                    Portion of the strategy reserved for NFT purchases.
+                    WMOVE balance of treasury ({TREASURY_ADDRESS.slice(0, 8)}…)
                   </StatHelpText>
                 </Stat>
                 <Stat>
                   <StatLabel>Burnable Balance</StatLabel>
                   <StatNumber>
-                    {poolLoading ? '—' : `${burnableBalance.toFixed(3)} RATHER`}
+                    {treasuryRatherLoading ? '—' : `${burnableBalance.toFixed(3)} RATHER`}
                   </StatNumber>
                   <StatHelpText mt={1} color="text.tertiary">
-                    Total RATHER accrued on NFT sales.
+                    RATHER balance of treasury available for burning.
                   </StatHelpText>
                 </Stat>
                 {pendingBurnTxId && (

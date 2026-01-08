@@ -27,6 +27,28 @@ const DECIMAL_MULTIPLIER = 10 ** DECIMALS;
 // ============ Transaction Builders ============
 
 /**
+ * Build transaction to create a new pool with RatherToken as X and WMOVE as Y
+ * @param admin - Admin address for the pool
+ * @param feeRecipient - Address to receive protocol fees
+ * @param feeBps - Fee in basis points (e.g., 30 = 0.3%)
+ * @param feeToken - 0 = collect fee in X (RatherToken), 1 = collect fee in Y (WMOVE)
+ */
+export function buildCreatePoolTransaction(
+  admin: string,
+  feeRecipient: string,
+  feeBps: number,
+  feeToken: number
+): InputTransactionData {
+  return {
+    data: {
+      function: POOL_FUNCTIONS.CREATE_POOL_ENTRY,
+      typeArguments: [TYPE_ARGUMENTS.RATHER_TOKEN, TYPE_ARGUMENTS.WMOVE],
+      functionArguments: [admin, feeRecipient, feeBps, feeToken],
+    },
+  };
+}
+
+/**
  * Build transaction to wrap MOVE to WMOVE
  * Amount in MOVE (will be converted to octas internally)
  */

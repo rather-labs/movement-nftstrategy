@@ -788,6 +788,7 @@ module nft_strategy_addr::pool {
         len1 < len2
     }
 
+    #[view]
     public fun exists_pool<X, Y>(): bool {
         let pool_addr = get_pool_address<X, Y>();
         exists<Pool<X, Y>>(pool_addr)
