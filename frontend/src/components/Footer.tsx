@@ -79,7 +79,7 @@ export const Footer = () => {
                 />
               </Link>
               <Text color="text.secondary" fontSize="sm">
-                An automated NFT accumulation strategy protocol built on Stacks. Non-custodial,
+                An automated NFT accumulation strategy protocol built on Movement. Non-custodial,
                 fully on-chain, and built for composability.
               </Text>
               <HStack spacing={4} pt={2}>

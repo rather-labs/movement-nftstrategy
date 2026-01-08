@@ -6,13 +6,13 @@ export const NETWORK_CONFIG = {
   testnet: {
     chainId: 250,
     name: 'Movement Testnet',
-    fullnode: 'https://full.testnet.movementinfra.xyz/v1',
+    fullnode: 'https://testnet.movementnetwork.xyz/v1',
     explorerNetwork: 'testnet',
   },
   mainnet: {
     chainId: 126,
     name: 'Movement Mainnet',
-    fullnode: 'https://full.mainnet.movementinfra.xyz/v1',
+    fullnode: 'https://mainnet.movementnetwork.xyz/v1',
     explorerNetwork: 'mainnet',
   },
 } as const;

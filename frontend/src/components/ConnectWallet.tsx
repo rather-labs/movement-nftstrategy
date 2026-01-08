@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Button,
   Flex,
@@ -13,12 +14,15 @@ import {
   Link,
   useToast,
   Box,
+  Text,
+  Skeleton,
   type ButtonProps,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ExternalLinkIcon, CopyIcon } from '@chakra-ui/icons';
 import { useWallet } from '@/lib/wallet-context';
 import { WalletSelectionModal } from './WalletSelectionModal';
 import { getAccountExplorerLink } from '@/utils/explorer-links';
+import { getAptosClient } from '@/lib/movement-client';
 
 type ConnectWalletButtonProps = ButtonProps & { children?: React.ReactNode };
 
@@ -26,8 +30,44 @@ export const ConnectWalletButton = (buttonProps: ConnectWalletButtonProps) => {
   const { children } = buttonProps;
   const toast = useToast();
   const { account, connected, disconnect, network } = useWallet();
+  const [balance, setBalance] = useState<string | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   const currentAddress = account?.address?.toString() || null;
+
+  // Fetch MOVE balance when connected
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!currentAddress) {
+        setBalance(null);
+        return;
+      }
+
+      setIsLoadingBalance(true);
+      try {
+        const client = getAptosClient();
+        const resources = await client.getAccountResource({
+          accountAddress: currentAddress,
+          resourceType: '0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>',
+        });
+
+        const coinValue = (resources as any)?.coin?.value || '0';
+        // Convert from octas (8 decimals) to MOVE
+        const moveBalance = (Number(coinValue) / 1e8).toFixed(4);
+        setBalance(moveBalance);
+      } catch (error) {
+        console.error('Failed to fetch balance:', error);
+        setBalance('0');
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+    // Refresh balance every 30 seconds
+    const interval = setInterval(fetchBalance, 30000);
+    return () => clearInterval(interval);
+  }, [currentAddress]);
 
   const copyAddress = () => {
     if (currentAddress) {
@@ -97,6 +137,16 @@ export const ConnectWalletButton = (buttonProps: ConnectWalletButtonProps) => {
             </Flex>
           </Button>
         </Link>
+        {/* MOVE Balance Indicator */}
+        <Box ml={2} px={2} py={1} bg="bg.subtle" borderRadius="md">
+          {isLoadingBalance ? (
+            <Skeleton height="16px" width="60px" />
+          ) : (
+            <Text fontSize="sm" fontWeight="medium" color="text.secondary">
+              {balance ?? '0'} MOVE
+            </Text>
+          )}
+        </Box>
         <MenuButton
           as={IconButton}
           variant="ghost"

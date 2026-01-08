@@ -12,10 +12,8 @@ import {
   ModalCloseButton,
   VStack,
   Text,
-  HStack,
   Image,
   useDisclosure,
-  Spinner,
 } from '@chakra-ui/react';
 
 interface WalletSelectionModalProps {
@@ -35,11 +33,16 @@ export function WalletSelectionModal({ children }: WalletSelectionModalProps) {
   const availableWallets = (wallets || [])
     .filter((wallet) => {
       const name = wallet.name.toLowerCase();
-      // Exclude Google/AptosConnect wallets that don't support Movement
-      return !name.includes('google') && !name.includes('aptosconnect');
+      // Remove wallets that are known to be incompatible with Movement
+      return (
+        !name.includes('google') &&
+        !name.includes('apple') &&
+        !name.includes('aptosconnect') &&
+        !name.includes('petra')
+      );
     })
+    .filter((wallet, index, self) => self.findIndex((w) => w.name === wallet.name) === index)
     .sort((a, b) => {
-      // Nightly first
       if (a.name.toLowerCase().includes('nightly')) return -1;
       if (b.name.toLowerCase().includes('nightly')) return 1;
       return 0;
@@ -105,7 +108,7 @@ export function WalletSelectionModal({ children }: WalletSelectionModalProps) {
               ) : (
                 <VStack spacing={3} py={4}>
                   <Text color="gray.500" textAlign="center">
-                    No compatible wallets detected.
+                    No Movement-compatible wallets detected.
                   </Text>
                   <Button
                     as="a"
