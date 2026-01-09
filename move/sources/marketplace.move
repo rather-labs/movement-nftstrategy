@@ -382,11 +382,15 @@ module nft_strategy_addr::marketplace {
         let payment = coin::withdraw<AptosCoin>(buyer, price);
 
         // Split payment: fee to recipient, rest to seller
+        // Using primary_fungible_store::deposit instead of coin::deposit
+        // This works for both regular accounts and object addresses (like treasury)
         if (fee_amount > 0) {
             let fee_coin = coin::extract(&mut payment, fee_amount);
-            coin::deposit(marketplace.fee_recipient, fee_coin);
+            let fee_fa = coin::coin_to_fungible_asset(fee_coin);
+            primary_fungible_store::deposit(marketplace.fee_recipient, fee_fa);
         };
-        coin::deposit(seller_addr, payment);
+        let payment_fa = coin::coin_to_fungible_asset(payment);
+        primary_fungible_store::deposit(seller_addr, payment_fa);
 
         // Get current NFT owner (escrow address)
         let escrow_addr = object::owner(nft);
@@ -515,11 +519,15 @@ module nft_strategy_addr::marketplace {
         let payment = coin::withdraw<AptosCoin>(buyer, price);
 
         // Split payment: fee to recipient, rest to seller
+        // Using primary_fungible_store::deposit instead of coin::deposit
+        // This works for both regular accounts and object addresses (like treasury)
         if (fee_amount > 0) {
             let fee_coin = coin::extract(&mut payment, fee_amount);
-            coin::deposit(marketplace.fee_recipient, fee_coin);
+            let fee_fa = coin::coin_to_fungible_asset(fee_coin);
+            primary_fungible_store::deposit(marketplace.fee_recipient, fee_fa);
         };
-        coin::deposit(seller_addr, payment);
+        let payment_fa = coin::coin_to_fungible_asset(payment);
+        primary_fungible_store::deposit(seller_addr, payment_fa);
 
         // Get current NFT owner (escrow address)
         let escrow_addr = object::owner(nft);

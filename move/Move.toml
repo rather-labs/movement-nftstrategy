@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = ["Rather Labs Inc."]
 
 [addresses]
-nft_strategy_addr = "0x07e4961db940fb1aaeddd59e4b396bf36c96cf6db5b298f7d8cbeba918cd72d6"
+nft_strategy_addr = "0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b"
 # nft_strategy_addr = "_"
 
 [dev-addresses]

@@ -97,6 +97,9 @@ module nft_strategy_addr::strategy {
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let treasury_signer = object::generate_signer(&constructor_ref);
         let treasury_address = signer::address_of(&treasury_signer);
+        // Treasury uses primary_fungible_store for receiving payments
+        // No CoinStore registration needed since marketplace deposits as FungibleAsset
+        let _ = treasury_signer; // Silence unused warning
 
         // Store strategy configuration at module address
         move_to(
