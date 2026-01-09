@@ -1,7 +1,12 @@
 import { UseQueryResult, useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/lib/wallet-context';
 import { getAptosClient } from '@/lib/movement-client';
-import { MODULE_ADDRESS, NFT_FUNCTIONS, MARKETPLACE_FUNCTIONS } from '@/constants/contracts';
+import {
+  MODULE_ADDRESS,
+  NFT_FUNCTIONS,
+  MARKETPLACE_FUNCTIONS,
+  STRATEGY_FUNCTIONS,
+} from '@/constants/contracts';
 import { addressesEqual } from '@/utils/formatting';
 
 // NFT holding information
@@ -334,6 +339,7 @@ export interface FloorListingResult {
 /**
  * Hook to fetch the floor (cheapest) listing from the marketplace
  * Returns the cheapest listed NFT and total listing count
+ * Excludes NFTs listed by the strategy treasury to prevent self-buying
  */
 export const useFloorListing = (): UseQueryResult<FloorListingResult> => {
   const { network } = useWallet();
@@ -344,7 +350,23 @@ export const useFloorListing = (): UseQueryResult<FloorListingResult> => {
       const client = getAptosClient();
 
       try {
-        // First, get the collection address
+        // First, try to get the treasury address to exclude treasury listings
+        let treasuryAddress: string | null = null;
+        try {
+          const treasuryResult = await client.view({
+            payload: {
+              function:
+                STRATEGY_FUNCTIONS.GET_TREASURY_ADDRESS as `${string}::${string}::${string}`,
+              typeArguments: [],
+              functionArguments: [],
+            },
+          });
+          treasuryAddress = treasuryResult[0] as string;
+        } catch {
+          // Strategy not initialized, no treasury to exclude
+        }
+
+        // Get the collection address
         const collectionAddrResult = await client.view({
           payload: {
             function: NFT_FUNCTIONS.GET_COLLECTION_ADDRESS as `${string}::${string}::${string}`,
@@ -412,6 +434,11 @@ export const useFloorListing = (): UseQueryResult<FloorListingResult> => {
 
                     const seller = listingResult[0] as string;
                     const price = Number(listingResult[1]);
+
+                    // Skip listings from the treasury address to prevent self-buying
+                    if (treasuryAddress && addressesEqual(seller, treasuryAddress)) {
+                      return; // Skip this listing
+                    }
 
                     state.totalListings++;
 
