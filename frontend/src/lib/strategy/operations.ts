@@ -10,7 +10,6 @@ import {
   MARKETPLACE_FUNCTIONS,
   NFT_FUNCTIONS,
   WMOVE_FUNCTIONS,
-  TREASURY_ADDRESS,
   STRATEGY_FUNCTIONS,
 } from '@/constants/contracts';
 import { viewFunction } from '@/lib/movement-client';
@@ -77,11 +76,16 @@ export function buildBurnRatherTokenTransaction(
 // ============ View Functions ============
 
 /**
- * Get WMOVE balance for the treasury address
+ * Get WMOVE balance for the treasury address (dynamically fetched)
  */
 export async function fetchTreasuryWmoveBalance(): Promise<number> {
   try {
-    const result = await viewFunction<[string]>(WMOVE_FUNCTIONS.BALANCE_OF, [], [TREASURY_ADDRESS]);
+    const treasuryAddress = await fetchStrategyTreasuryAddress();
+    if (!treasuryAddress) {
+      console.warn('Treasury address not available, strategy may not be initialized');
+      return 0;
+    }
+    const result = await viewFunction<[string]>(WMOVE_FUNCTIONS.BALANCE_OF, [], [treasuryAddress]);
     return Number(result[0]);
   } catch (error) {
     console.error('Error fetching treasury WMOVE balance:', error);
@@ -90,14 +94,19 @@ export async function fetchTreasuryWmoveBalance(): Promise<number> {
 }
 
 /**
- * Get RATHER token balance for the treasury address (burnable balance)
+ * Get RATHER token balance for the treasury address (dynamically fetched)
  */
 export async function fetchTreasuryRatherBalance(): Promise<number> {
   try {
+    const treasuryAddress = await fetchStrategyTreasuryAddress();
+    if (!treasuryAddress) {
+      console.warn('Treasury address not available, strategy may not be initialized');
+      return 0;
+    }
     const result = await viewFunction<[string]>(
       RATHER_TOKEN_FUNCTIONS.BALANCE_OF,
       [],
-      [TREASURY_ADDRESS]
+      [treasuryAddress]
     );
     return Number(result[0]);
   } catch (error) {
@@ -380,4 +389,49 @@ export async function fetchTreasuryAddressPreview(adminAddress: string): Promise
     console.error('Error fetching treasury address preview:', error);
     return null;
   }
+}
+
+/**
+ * Fetch the burnable balance (native MOVE from NFT sale proceeds)
+ * This is the amount available for buy_rather_and_burn
+ */
+export async function fetchBurnableBalance(): Promise<number> {
+  try {
+    const result = await viewFunction<[string]>(STRATEGY_FUNCTIONS.GET_BURNABLE_BALANCE, [], []);
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error fetching burnable balance:', error);
+    return 0;
+  }
+}
+
+/**
+ * Fetch total RATHER tokens burned by the strategy
+ */
+export async function fetchTotalRatherBurned(): Promise<number> {
+  try {
+    const result = await viewFunction<[string]>(STRATEGY_FUNCTIONS.GET_TOTAL_RATHER_BURNED, [], []);
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error fetching total RATHER burned:', error);
+    return 0;
+  }
+}
+
+/**
+ * Build transaction to execute the buy RATHER and burn strategy
+ * This can be called by any user but operates on treasury funds (native MOVE from NFT sales)
+ * Steps:
+ * 1. Wraps treasury's native MOVE to WMOVE
+ * 2. Swaps WMOVE for RATHER via pool
+ * 3. Burns the RATHER tokens
+ */
+export function buildBuyRatherAndBurnTransaction(): InputTransactionData {
+  return {
+    data: {
+      function: STRATEGY_FUNCTIONS.BUY_RATHER_AND_BURN,
+      typeArguments: [],
+      functionArguments: [],
+    },
+  };
 }

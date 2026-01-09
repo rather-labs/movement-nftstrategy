@@ -90,6 +90,20 @@ module nft_strategy_addr::rather_token {
         stats.total_burned = stats.total_burned + amount;
     }
 
+    /// Burn a FungibleAsset directly (no admin check - useful for module-to-module calls)
+    /// Used by strategy module to burn RATHER tokens purchased from pool
+    public fun burn_fa(fa: fungible_asset::FungibleAsset) acquires RatherTokenRef, RatherTokenStats {
+        let amount = fungible_asset::amount(&fa);
+        let asset = get_metadata();
+        let object_addr = object::object_address(&asset);
+        let token_ref = borrow_global<RatherTokenRef>(object_addr);
+        fungible_asset::burn(&token_ref.burn_ref, fa);
+
+        // Update stats
+        let stats = borrow_global_mut<RatherTokenStats>(object_addr);
+        stats.total_burned = stats.total_burned + amount;
+    }
+
     #[view]
     public fun balance_of(owner: address): u64 {
         primary_fungible_store::balance(owner, get_metadata())

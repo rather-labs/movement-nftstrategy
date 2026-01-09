@@ -37,6 +37,7 @@ import { waitForTransaction } from '@/lib/movement-client';
 import {
   buildMintRatherTokenTransaction,
   buildBuyFloorAndRelistTransaction,
+  buildBuyRatherAndBurnTransaction,
   fetchLpTokenBalance,
   fetchRatherTokenBalance,
   fetchRatherTokenStats,
@@ -44,10 +45,13 @@ import {
   fetchTreasuryWmoveBalance,
   fetchTreasuryRatherBalance,
   fetchStrategyTreasuryWmoveBalance,
+  fetchBurnableBalance,
+  fetchTotalRatherBurned,
   isStrategyInitialized,
+  fetchStrategyTreasuryAddress,
 } from '@/lib/strategy/operations';
 import { fetchPoolReserves, fromOnChainAmount, toOnChainAmount } from '@/lib/pool/operations';
-import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
+import { MODULE_ADDRESS } from '@/constants/contracts';
 import { useNftHoldings, useFloorListing } from '@/hooks/useNftHoldings';
 import { TokenImage } from '@/components/nft/TokenImage';
 
@@ -72,6 +76,13 @@ export default function StrategyDashboard() {
     refetchInterval: 15000,
   });
 
+  // Treasury address from strategy contract
+  const { data: treasuryAddress } = useQuery({
+    queryKey: ['strategy-treasury-address'],
+    queryFn: () => fetchStrategyTreasuryAddress(),
+    refetchInterval: 60000,
+  });
+
   // Treasury WMOVE balance
   const {
     data: treasuryWmove = 0,
@@ -91,6 +102,28 @@ export default function StrategyDashboard() {
   } = useQuery({
     queryKey: ['treasury-rather-balance'],
     queryFn: () => fetchTreasuryRatherBalance(),
+    refetchInterval: 15000,
+  });
+
+  // Burnable balance (native MOVE from NFT sale proceeds)
+  const {
+    data: burnableMoveBalance = 0,
+    isLoading: burnableLoading,
+    refetch: refetchBurnableBalance,
+  } = useQuery({
+    queryKey: ['burnable-balance'],
+    queryFn: () => fetchBurnableBalance(),
+    refetchInterval: 15000,
+  });
+
+  // Total RATHER burned by strategy
+  const {
+    data: totalStrategyBurned = 0,
+    isLoading: strategyBurnedLoading,
+    refetch: refetchStrategyBurned,
+  } = useQuery({
+    queryKey: ['total-strategy-burned'],
+    queryFn: () => fetchTotalRatherBurned(),
     refetchInterval: 15000,
   });
 
@@ -153,9 +186,14 @@ export default function StrategyDashboard() {
   }, [treasuryWmove]);
 
   const burnableBalance = useMemo(() => {
-    // Burnable balance is the RATHER token balance of the treasury address
-    return fromOnChainAmount(treasuryRather);
-  }, [treasuryRather]);
+    // Burnable balance is the native MOVE balance of the treasury (from NFT sale proceeds)
+    return fromOnChainAmount(burnableMoveBalance);
+  }, [burnableMoveBalance]);
+
+  // Total RATHER burned by the strategy contract
+  const strategyBurnedRather = useMemo(() => {
+    return fromOnChainAmount(totalStrategyBurned);
+  }, [totalStrategyBurned]);
 
   // Floor listing from marketplace - get the cheapest listed NFT
   const floorListing = useMemo(() => {
@@ -203,6 +241,8 @@ export default function StrategyDashboard() {
     void refetchRather();
     void refetchTreasuryWmove();
     void refetchTreasuryRather();
+    void refetchBurnableBalance();
+    void refetchStrategyBurned();
     void refetchRatherStats();
     void refetchFloorListing();
   }, [
@@ -211,6 +251,8 @@ export default function StrategyDashboard() {
     refetchRather,
     refetchTreasuryWmove,
     refetchTreasuryRather,
+    refetchBurnableBalance,
+    refetchStrategyBurned,
     refetchRatherStats,
     refetchFloorListing,
   ]);
@@ -302,14 +344,44 @@ export default function StrategyDashboard() {
       return;
     }
 
-    setIsBurning(true);
-    try {
-      // TODO: Implement buy RATHER and burn transaction
+    if (burnableBalance <= 0) {
       toast({
-        title: 'Coming soon',
-        description: 'Buy RATHER & burn functionality is under development.',
+        title: 'No burnable balance',
+        description: 'The treasury has no MOVE proceeds from NFT sales to burn.',
         status: 'info',
       });
+      return;
+    }
+
+    setIsBurning(true);
+    try {
+      // Build the buy RATHER and burn transaction
+      const transaction = buildBuyRatherAndBurnTransaction();
+
+      // Sign and submit the transaction
+      const response = await signAndSubmitTransaction(transaction);
+      const txHash = response.hash;
+      setPendingBurnTxId(txHash);
+
+      toast({
+        title: 'Transaction submitted',
+        description: `Wrapping ${burnableBalance.toFixed(4)} MOVE, swapping to RATHER, and burning...`,
+        status: 'info',
+        duration: 5000,
+      });
+
+      // Wait for transaction confirmation
+      await waitForTransaction(txHash);
+
+      toast({
+        title: 'Buy RATHER & Burn successful!',
+        description: `Used ${burnableBalance.toFixed(4)} MOVE to buy and burn RATHER tokens.`,
+        status: 'success',
+        duration: 8000,
+      });
+
+      // Refresh all data
+      refreshAll();
     } catch (error: any) {
       toast({
         title: 'Burn failed',
@@ -319,7 +391,7 @@ export default function StrategyDashboard() {
     } finally {
       setIsBurning(false);
     }
-  }, [currentAddress, toast]);
+  }, [currentAddress, burnableBalance, signAndSubmitTransaction, refreshAll, toast]);
 
   return (
     <Container maxW="6xl" py={10}>
@@ -342,18 +414,27 @@ export default function StrategyDashboard() {
                     {treasuryWmoveLoading ? '—' : `${treasuryBalance.toFixed(3)} WMOVE`}
                   </StatNumber>
                   <StatHelpText mt={1} color="text.tertiary">
-                    WMOVE balance of treasury ({TREASURY_ADDRESS.slice(0, 8)}…)
+                    WMOVE for floor buying (
+                    {treasuryAddress ? `${treasuryAddress.slice(0, 8)}…` : '—'})
                   </StatHelpText>
                 </Stat>
                 <Stat>
                   <StatLabel>Burnable Balance</StatLabel>
                   <StatNumber>
-                    {treasuryRatherLoading ? '—' : `${burnableBalance.toFixed(3)} RATHER`}
+                    {burnableLoading ? '—' : `${burnableBalance.toFixed(3)} MOVE`}
                   </StatNumber>
                   <StatHelpText mt={1} color="text.tertiary">
-                    RATHER balance of treasury available for burning.
+                    Native MOVE from NFT sale proceeds. Use to buy &amp; burn RATHER.
                   </StatHelpText>
                 </Stat>
+                {strategyBurnedRather > 0 && (
+                  <Stat size="sm">
+                    <StatLabel>Strategy Burned</StatLabel>
+                    <StatNumber fontSize="md" color="orange.500">
+                      {strategyBurnedRather.toFixed(3)} RATHER
+                    </StatNumber>
+                  </Stat>
+                )}
                 {pendingBurnTxId && (
                   <Link
                     fontSize="sm"
@@ -510,8 +591,8 @@ export default function StrategyDashboard() {
           <CardBody>
             <Text fontSize="sm" color="text.secondary">
               The buy action consumes treasury WMOVE to purchase the lowest-priced NFT and relists
-              it at a premium. The burn action routes available WMOVE through the liquidity pool,
-              acquires RATHER, and burns it to reduce supply.
+              it at a 10% premium. The burn action takes MOVE from NFT sale proceeds, wraps to
+              WMOVE, swaps for RATHER through the liquidity pool, and burns it to reduce supply.
             </Text>
           </CardBody>
         </Card>

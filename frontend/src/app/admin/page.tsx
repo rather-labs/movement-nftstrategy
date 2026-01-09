@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Button,
@@ -38,7 +38,7 @@ import { useWallet } from '@/lib/wallet-context';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { getExplorerLink, getTransactionExplorerUrl } from '@/utils/explorer-links';
 import { addressesEqual } from '@/utils/formatting';
-import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
+import { MODULE_ADDRESS } from '@/constants/contracts';
 import {
   fetchPoolReserves,
   fetchPoolFeeInfo,
@@ -194,6 +194,7 @@ export default function AdminUtilitiesPage() {
 
   // Pool state
   const [isCreatingPool, setIsCreatingPool] = useState(false);
+  const [poolFeeRecipientInput, setPoolFeeRecipientInput] = useState('');
 
   // RATHER token state
   const [isMinting, setIsMinting] = useState(false);
@@ -321,6 +322,13 @@ export default function AdminUtilitiesPage() {
     enabled: connected && !!currentAddress && strategyInitialized === false,
   });
 
+  // Set default pool fee recipient to strategy treasury address when available
+  useEffect(() => {
+    if (strategyTreasuryAddress && !poolFeeRecipientInput) {
+      setPoolFeeRecipientInput(strategyTreasuryAddress);
+    }
+  }, [strategyTreasuryAddress, poolFeeRecipientInput]);
+
   const refreshAll = useCallback(() => {
     void refetchPool();
     void refetchMarketplace();
@@ -354,16 +362,25 @@ export default function AdminUtilitiesPage() {
       return;
     }
 
+    if (!poolFeeRecipientInput || !poolFeeRecipientInput.startsWith('0x')) {
+      toast({
+        title: 'Invalid fee recipient',
+        description: 'Please enter a valid address for the fee recipient.',
+        status: 'warning',
+      });
+      return;
+    }
+
     setIsCreatingPool(true);
     try {
       // Create pool with:
       // - Admin: MODULE_ADDRESS (deployer)
-      // - Fee Recipient: TREASURY_ADDRESS
+      // - Fee Recipient: User-provided address (defaults to strategy treasury)
       // - Fee BPS: 500 (5.00%)
       // - Fee Token: 1 (WMOVE)
       const tx = buildCreatePoolTransaction(
         MODULE_ADDRESS!,
-        TREASURY_ADDRESS,
+        poolFeeRecipientInput,
         500, // 5.00% fee
         1 // Collect fee in Y (WMOVE)
       );
@@ -400,7 +417,14 @@ export default function AdminUtilitiesPage() {
     } finally {
       setIsCreatingPool(false);
     }
-  }, [currentAddress, signAndSubmitTransaction, toast, refetchPoolExists, refetchPool]);
+  }, [
+    currentAddress,
+    poolFeeRecipientInput,
+    signAndSubmitTransaction,
+    toast,
+    refetchPoolExists,
+    refetchPool,
+  ]);
 
   // Handle mint RATHER tokens
   const handleMintRather = useCallback(async () => {
@@ -904,22 +928,31 @@ export default function AdminUtilitiesPage() {
                   </Text>
                   <Text fontSize="sm">WMOVE (fees collected in WMOVE)</Text>
                 </HStack>
-                <HStack>
-                  <Text fontWeight="bold" fontSize="sm">
-                    Fee Recipient:
-                  </Text>
-                  <Text fontSize="sm" fontFamily="mono">
-                    {TREASURY_ADDRESS.slice(0, 12)}...{TREASURY_ADDRESS.slice(-8)}
-                  </Text>
-                </HStack>
               </VStack>
+              <FormControl>
+                <FormLabel fontSize="sm" fontWeight="bold">
+                  Fee Recipient
+                </FormLabel>
+                <Input
+                  placeholder="0x..."
+                  value={poolFeeRecipientInput}
+                  onChange={(e) => setPoolFeeRecipientInput(e.target.value)}
+                  fontFamily="mono"
+                  fontSize="sm"
+                />
+                <FormHelperText>
+                  {strategyInitialized
+                    ? 'Defaults to strategy treasury address. Swap fees will go to this address.'
+                    : 'Initialize Strategy first to auto-populate with treasury address.'}
+                </FormHelperText>
+              </FormControl>
               <Divider />
               <HStack spacing={4}>
                 <Button
                   colorScheme="purple"
                   onClick={handleCreatePool}
                   isLoading={isCreatingPool}
-                  isDisabled={poolExistsData === true}
+                  isDisabled={poolExistsData === true || !poolFeeRecipientInput}
                 >
                   Create Pool
                 </Button>

@@ -47,6 +47,7 @@ module nft_strategy_addr::errors {
     const ESELLER_CANNOT_BUY: u64 = 30;
     const EMARKETPLACE_NOT_INITIALIZED: u64 = 31;
     const EMARKETPLACE_ALREADY_INITIALIZED: u64 = 32;
+    const EINSUFFICIENT_PAYMENT: u64 = 38;
 
     // NFT Collection errors
     const ECOLLECTION_NOT_EXISTS: u64 = 33;
@@ -181,6 +182,10 @@ module nft_strategy_addr::errors {
 
     public fun marketplace_already_initialized(): u64 {
         EMARKETPLACE_ALREADY_INITIALIZED
+    }
+
+    public fun insufficient_payment(): u64 {
+        EINSUFFICIENT_PAYMENT
     }
 
     public fun collection_not_exists(): u64 {

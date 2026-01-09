@@ -140,6 +140,46 @@ module nft_strategy_addr::wmove {
         primary_fungible_store::deposit(caller_addr, move_fa);
     }
 
+    /// Wrap native MOVE FA into WMOVE FA (internal function for module-to-module calls)
+    /// Takes native MOVE as FungibleAsset, returns WMOVE as FungibleAsset
+    /// Used by strategy module to wrap treasury proceeds
+    public fun wrap_fa(
+        move_fa: fungible_asset::FungibleAsset
+    ): fungible_asset::FungibleAsset acquires WMOVERef {
+        let amount = fungible_asset::amount(&move_fa);
+        assert!(amount > 0, E_ZERO_AMOUNT);
+
+        // Deposit native MOVE FA into the WMOVE object's reserve
+        let wmove_addr = object::object_address(&get_metadata());
+        primary_fungible_store::deposit(wmove_addr, move_fa);
+
+        // Mint equal WMOVE
+        let wmove_ref = borrow_global<WMOVERef>(wmove_addr);
+        fungible_asset::mint(&wmove_ref.mint_ref, amount)
+    }
+
+    /// Unwrap WMOVE FA back to native MOVE FA (internal function for module-to-module calls)
+    /// Takes WMOVE as FungibleAsset, returns native MOVE as FungibleAsset
+    /// Used by strategy module for treasury operations
+    public fun unwrap_fa(
+        wmove_fa: fungible_asset::FungibleAsset
+    ): fungible_asset::FungibleAsset acquires WMOVERef {
+        let amount = fungible_asset::amount(&wmove_fa);
+        assert!(amount > 0, E_ZERO_AMOUNT);
+        assert!(get_reserve() >= amount, E_INSUFFICIENT_RESERVE);
+
+        let wmove_addr = object::object_address(&get_metadata());
+
+        // Burn the WMOVE
+        let wmove_ref = borrow_global<WMOVERef>(wmove_addr);
+        fungible_asset::burn(&wmove_ref.burn_ref, wmove_fa);
+
+        // Withdraw native MOVE from reserve using extend_ref
+        let reserve_signer = object::generate_signer_for_extending(&wmove_ref.extend_ref);
+        let move_metadata = get_native_move_metadata();
+        primary_fungible_store::withdraw(&reserve_signer, move_metadata, amount)
+    }
+
     // ============ Internal Helpers ============
 
     /// Get the metadata for native MOVE (AptosCoin's paired FA)

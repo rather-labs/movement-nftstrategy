@@ -121,6 +121,7 @@ export const WMOVE_FUNCTIONS = {
 export const STRATEGY_FUNCTIONS = {
   INITIALIZE: buildFunctionId('strategy', 'initialize'),
   BUY_FLOOR_AND_RELIST: buildFunctionId('strategy', 'buy_floor_and_relist'),
+  BUY_RATHER_AND_BURN: buildFunctionId('strategy', 'buy_rather_and_burn'),
   DEPOSIT_WMOVE: buildFunctionId('strategy', 'deposit_wmove'),
   WRAP_AND_DEPOSIT: buildFunctionId('strategy', 'wrap_and_deposit'),
   // View functions
@@ -128,6 +129,8 @@ export const STRATEGY_FUNCTIONS = {
   GET_TREASURY_ADDRESS: buildFunctionId('strategy', 'get_treasury_address'),
   GET_TREASURY_ADDRESS_PREVIEW: buildFunctionId('strategy', 'get_treasury_address_preview'),
   GET_TREASURY_WMOVE_BALANCE: buildFunctionId('strategy', 'get_treasury_wmove_balance'),
+  GET_BURNABLE_BALANCE: buildFunctionId('strategy', 'get_burnable_balance'),
+  GET_TOTAL_RATHER_BURNED: buildFunctionId('strategy', 'get_total_rather_burned'),
   IS_INITIALIZED: buildFunctionId('strategy', 'is_initialized'),
 } as const;
 
@@ -137,7 +140,3 @@ export const TYPE_ARGUMENTS = {
   RATHER_TOKEN: `${MODULE_ADDRESS}::${MODULES.RATHER_TOKEN}::RatherToken`,
   WMOVE: `${MODULE_ADDRESS}::${MODULES.WMOVE}::WMOVE`,
 } as const;
-
-// Treasury address for strategy fees
-export const TREASURY_ADDRESS =
-  '0xf91c78b42b0856c7ef9b0870195a7ad942efe679db99ebe6692fc3a5731b0b77';
