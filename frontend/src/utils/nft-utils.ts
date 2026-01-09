@@ -4,12 +4,9 @@ import { MODULE_ADDRESS } from '@/constants/contracts';
  * Get a placeholder image for an NFT based on its token ID
  * Used when actual token URI is not available
  */
-export const getPlaceholderImage = (
-  collectionAddress: string,
-  tokenId: number
-): string | null => {
+export const getPlaceholderImage = (collectionAddress: string, tokenId: number): string | null => {
   // Check if this is from our NFT collection
-  if (collectionAddress.startsWith(MODULE_ADDRESS)) {
+  if (MODULE_ADDRESS && collectionAddress.startsWith(MODULE_ADDRESS)) {
     return `/images/dogs/${tokenId % 12}.webp`;
   }
   return null;

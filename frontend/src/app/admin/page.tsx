@@ -35,6 +35,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/lib/wallet-context';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { getExplorerLink, getTransactionExplorerUrl } from '@/utils/explorer-links';
+import { addressesEqual } from '@/utils/formatting';
 import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
 import {
   fetchPoolReserves,
@@ -98,7 +99,7 @@ export default function AdminUtilitiesPage() {
   // Check if current user is the admin
   const isAdmin = useMemo(() => {
     if (!currentAddress || !MODULE_ADDRESS) return false;
-    return currentAddress.toLowerCase() === MODULE_ADDRESS.toLowerCase();
+    return addressesEqual(currentAddress, MODULE_ADDRESS);
   }, [currentAddress]);
 
   // Fetch pool reserves

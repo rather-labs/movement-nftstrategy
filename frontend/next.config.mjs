@@ -7,7 +7,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'placedog.net',
+        hostname: 'robohash.org',
       },
     ],
   },

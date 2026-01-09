@@ -229,5 +229,8 @@ export async function getNftsOwnedByAddress(ownerAddress: string): Promise<strin
  * Get the default collection address (using MODULE_ADDRESS as creator)
  */
 export async function getDefaultCollectionAddress(): Promise<string> {
+  if (!MODULE_ADDRESS) {
+    throw new Error('MODULE_ADDRESS is not configured');
+  }
   return getCollectionAddress(MODULE_ADDRESS);
 }
