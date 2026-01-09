@@ -38,6 +38,7 @@ import {
   buildMintRatherTokenTransaction,
   fetchLpTokenBalance,
   fetchRatherTokenBalance,
+  fetchRatherTokenStats,
   fetchStrategyMetrics,
   fetchTreasuryWmoveBalance,
   fetchTreasuryRatherBalance,
@@ -124,6 +125,17 @@ export default function StrategyDashboard() {
   // Strategy's NFT holdings (owned by deployer/MODULE_ADDRESS)
   const { data: strategyNfts, isLoading: nftsLoading } = useNftHoldings(MODULE_ADDRESS);
 
+  // RATHER token stats (total minted, burned, current supply)
+  const {
+    data: ratherStats,
+    isLoading: ratherStatsLoading,
+    refetch: refetchRatherStats,
+  } = useQuery({
+    queryKey: ['rather-token-stats'],
+    queryFn: () => fetchRatherTokenStats(),
+    refetchInterval: 15000,
+  });
+
   // Computed values
   const treasuryBalance = useMemo(() => {
     // Treasury balance is the WMOVE balance of the treasury address
@@ -145,10 +157,20 @@ export default function StrategyDashboard() {
     return Math.min((treasuryBalance / floorPrice) * 100, 100);
   }, [treasuryBalance, floorPrice]);
 
-  // Burned RATHER stats (placeholder - needs actual implementation)
-  const burnedRather = 0;
-  const totalSupplyRather = 1_000_000; // Placeholder
-  const burnedPercentage = totalSupplyRather > 0 ? (burnedRather / totalSupplyRather) * 100 : 0;
+  // RATHER token stats from on-chain data
+  const burnedRather = useMemo(() => {
+    return fromOnChainAmount(ratherStats?.totalBurned ?? 0);
+  }, [ratherStats]);
+
+  const totalSupplyRather = useMemo(() => {
+    // Total supply is total minted (initial supply)
+    return fromOnChainAmount(ratherStats?.totalMinted ?? 0);
+  }, [ratherStats]);
+
+  const burnedPercentage = useMemo(() => {
+    if (!totalSupplyRather || totalSupplyRather === 0) return 0;
+    return (burnedRather / totalSupplyRather) * 100;
+  }, [burnedRather, totalSupplyRather]);
 
   const refreshAll = useCallback(() => {
     void refetchPool();
@@ -156,7 +178,15 @@ export default function StrategyDashboard() {
     void refetchRather();
     void refetchTreasuryWmove();
     void refetchTreasuryRather();
-  }, [refetchPool, refetchMetrics, refetchRather, refetchTreasuryWmove, refetchTreasuryRather]);
+    void refetchRatherStats();
+  }, [
+    refetchPool,
+    refetchMetrics,
+    refetchRather,
+    refetchTreasuryWmove,
+    refetchTreasuryRather,
+    refetchRatherStats,
+  ]);
 
   const handleBuyFloor = useCallback(async () => {
     if (!currentAddress) {
@@ -445,35 +475,44 @@ export default function StrategyDashboard() {
                 <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
                   <Stat>
                     <StatLabel>Total Burned</StatLabel>
-                    <StatNumber>{`${burnedRather.toFixed(3)} RATHER`}</StatNumber>
+                    <StatNumber>
+                      {ratherStatsLoading ? '—' : `${burnedRather.toFixed(3)} RATHER`}
+                    </StatNumber>
                   </Stat>
                   <Stat>
                     <StatLabel>Supply Reduced</StatLabel>
-                    <StatNumber>{`${burnedPercentage.toFixed(2)}%`}</StatNumber>
+                    <StatNumber>
+                      {ratherStatsLoading ? '—' : `${burnedPercentage.toFixed(2)}%`}
+                    </StatNumber>
                     <StatHelpText mt={1} color="text.tertiary">
-                      Initial supply{' '}
-                      {totalSupplyRather.toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                        minimumFractionDigits: 0,
-                      })}{' '}
+                      Total minted{' '}
+                      {ratherStatsLoading
+                        ? '—'
+                        : totalSupplyRather.toLocaleString(undefined, {
+                            maximumFractionDigits: 3,
+                            minimumFractionDigits: 0,
+                          })}{' '}
                       RATHER
                     </StatHelpText>
                   </Stat>
                 </SimpleGrid>
                 <Stack spacing={2}>
                   <Text fontSize="sm" color="text.secondary">
-                    Burn progress against total supply
+                    Burn progress against total minted
                   </Text>
                   <Progress
                     value={burnedPercentage}
                     colorScheme="orange"
                     size="sm"
                     borderRadius="full"
+                    isIndeterminate={ratherStatsLoading}
                   />
                   <Text fontSize="xs" color="text.tertiary">
-                    {burnedPercentage > 0
-                      ? `${burnedPercentage.toFixed(2)}% permanently removed from circulation.`
-                      : 'No RATHER has been burned yet.'}
+                    {ratherStatsLoading
+                      ? 'Loading burn stats...'
+                      : burnedPercentage > 0
+                        ? `${burnedPercentage.toFixed(2)}% permanently removed from circulation.`
+                        : 'No RATHER has been burned yet.'}
                   </Text>
                 </Stack>
               </Stack>

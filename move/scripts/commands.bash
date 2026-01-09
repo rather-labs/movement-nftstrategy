@@ -278,6 +278,23 @@ movement move view \
   --args "address:${RECIPIENT_ADDR}" \
   --profile local-dev
 
+# Check total minted RATHER
+movement move view \
+  --function-id "${MY_ADDR}::rather_token::get_total_minted" \
+  --profile local-dev
+
+# Burn RATHER
+movement move run \
+  --function-id "${MY_ADDR}::rather_token::burn_entry" \
+  --args address:"${MY_ADDR}" u64:50000000000 \
+  --profile local-dev \
+  --assume-yes
+
+# Check total burned RATHER
+movement move view \
+  --function-id "${MY_ADDR}::rather_token::get_total_burned" \
+  --profile local-dev
+
 ##################################
 # TOKEN TRANSFERS (local-dev -> local-dev-2)
 ##################################

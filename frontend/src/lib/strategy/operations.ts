@@ -135,6 +135,38 @@ export async function fetchLpTokenBalance(address: string): Promise<number> {
 }
 
 /**
+ * Get RATHER token stats (total minted, total burned, current supply)
+ */
+export interface RatherTokenStats {
+  totalMinted: number;
+  totalBurned: number;
+  currentSupply: number;
+}
+
+export async function fetchRatherTokenStats(): Promise<RatherTokenStats> {
+  try {
+    const [totalMintedResult, totalBurnedResult, currentSupplyResult] = await Promise.all([
+      viewFunction<[string]>(RATHER_TOKEN_FUNCTIONS.GET_TOTAL_MINTED, [], []),
+      viewFunction<[string]>(RATHER_TOKEN_FUNCTIONS.GET_TOTAL_BURNED, [], []),
+      viewFunction<[string]>(RATHER_TOKEN_FUNCTIONS.GET_CURRENT_SUPPLY, [], []),
+    ]);
+
+    return {
+      totalMinted: Number(totalMintedResult[0]),
+      totalBurned: Number(totalBurnedResult[0]),
+      currentSupply: Number(currentSupplyResult[0]),
+    };
+  } catch (error) {
+    console.error('Error fetching RATHER token stats:', error);
+    return {
+      totalMinted: 0,
+      totalBurned: 0,
+      currentSupply: 0,
+    };
+  }
+}
+
+/**
  * Get total LP token supply
  */
 export async function fetchLpTokenSupply(): Promise<number> {

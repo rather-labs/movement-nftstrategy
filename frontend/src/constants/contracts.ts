@@ -101,6 +101,9 @@ export const RATHER_TOKEN_FUNCTIONS = {
   BALANCE_OF: buildFunctionId(MODULES.RATHER_TOKEN, 'balance_of'),
   GET_TOTAL_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_supply'),
   GET_METADATA: buildFunctionId(MODULES.RATHER_TOKEN, 'get_metadata'),
+  GET_CURRENT_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_current_supply'),
+  GET_TOTAL_MINTED: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_minted'),
+  GET_TOTAL_BURNED: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_burned'),
 } as const;
 
 // WMOVE functions
