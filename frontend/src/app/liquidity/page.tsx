@@ -55,7 +55,11 @@ import {
   fromOnChainAmount,
   poolExists,
 } from '@/lib/pool/operations';
-import { fetchLpTokenBalance, fetchWmoveBalance } from '@/lib/strategy/operations';
+import {
+  fetchLpTokenBalance,
+  fetchWmoveBalance,
+  fetchRatherTokenBalance,
+} from '@/lib/strategy/operations';
 import { waitForTransaction, fetchNativeMoveBalance } from '@/lib/movement-client';
 
 type SwapDirection = 'wmove-to-rather' | 'rather-to-wmove';
@@ -138,9 +142,22 @@ export default function LiquidityPage() {
     refetchInterval: 15000,
   });
 
+  // Fetch user's RATHER balance
+  const {
+    data: ratherBalance = 0,
+    isLoading: ratherBalanceLoading,
+    refetch: refetchRatherBalance,
+  } = useQuery({
+    queryKey: ['rather-balance', currentAddress],
+    queryFn: () => fetchRatherTokenBalance(currentAddress!),
+    enabled: !!currentAddress,
+    refetchInterval: 15000,
+  });
+
   const lpBalanceDisplay = fromOnChainAmount(lpBalance);
   const wmoveBalanceDisplay = fromOnChainAmount(wmoveBalance);
   const moveBalanceDisplay = fromOnChainAmount(moveBalance);
+  const ratherBalanceDisplay = fromOnChainAmount(ratherBalance);
 
   // Calculate price ratio from pool reserves
   const priceRatio = useMemo(() => {
@@ -644,7 +661,25 @@ export default function LiquidityPage() {
               </ButtonGroup>
 
               <FormControl>
-                <FormLabel>Amount ({inputTokenLabel})</FormLabel>
+                <FormLabel>
+                  <HStack justify="space-between" width="100%">
+                    <Text>Amount ({inputTokenLabel})</Text>
+                    <Text fontSize="sm" color="gray.500">
+                      Balance:{' '}
+                      {swapDirection === 'wmove-to-rather'
+                        ? wmoveBalanceLoading
+                          ? '...'
+                          : wmoveBalanceDisplay.toLocaleString(undefined, {
+                              maximumFractionDigits: 4,
+                            })
+                        : ratherBalanceLoading
+                          ? '...'
+                          : ratherBalanceDisplay.toLocaleString(undefined, {
+                              maximumFractionDigits: 4,
+                            })}
+                    </Text>
+                  </HStack>
+                </FormLabel>
                 <NumberInput
                   value={swapAmount}
                   onChange={(value) => setSwapAmount(value)}
@@ -851,7 +886,19 @@ export default function LiquidityPage() {
                       )}
 
                       <FormControl>
-                        <FormLabel>RATHER Amount</FormLabel>
+                        <FormLabel>
+                          <HStack justify="space-between" width="100%">
+                            <Text>RATHER Amount</Text>
+                            <Text fontSize="sm" color="gray.500">
+                              Balance:{' '}
+                              {ratherBalanceLoading
+                                ? '...'
+                                : ratherBalanceDisplay.toLocaleString(undefined, {
+                                    maximumFractionDigits: 4,
+                                  })}
+                            </Text>
+                          </HStack>
+                        </FormLabel>
                         <NumberInput
                           value={addAmountRather}
                           onChange={handleRatherAmountChange}
@@ -863,7 +910,19 @@ export default function LiquidityPage() {
                       </FormControl>
 
                       <FormControl>
-                        <FormLabel>WMOVE Amount</FormLabel>
+                        <FormLabel>
+                          <HStack justify="space-between" width="100%">
+                            <Text>WMOVE Amount</Text>
+                            <Text fontSize="sm" color="gray.500">
+                              Balance:{' '}
+                              {wmoveBalanceLoading
+                                ? '...'
+                                : wmoveBalanceDisplay.toLocaleString(undefined, {
+                                    maximumFractionDigits: 4,
+                                  })}
+                            </Text>
+                          </HStack>
+                        </FormLabel>
                         <NumberInput
                           value={addAmountWmove}
                           onChange={handleWmoveAmountChange}
