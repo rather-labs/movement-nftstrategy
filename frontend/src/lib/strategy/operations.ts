@@ -96,7 +96,7 @@ export async function fetchTreasuryRatherBalance(): Promise<number> {
  */
 export async function fetchRatherTokenBalance(address: string): Promise<number> {
   try {
-    const result = await viewFunction<[string]>(RATHER_TOKEN_FUNCTIONS.GET_BALANCE, [], [address]);
+    const result = await viewFunction<[string]>(RATHER_TOKEN_FUNCTIONS.BALANCE_OF, [], [address]);
     return Number(result[0]);
   } catch (error) {
     console.error('Error fetching RatherToken balance:', error);

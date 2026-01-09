@@ -95,7 +95,6 @@ export const LP_TOKEN_FUNCTIONS = {
 export const RATHER_TOKEN_FUNCTIONS = {
   MINT_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'mint_entry'),
   BURN_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'burn_entry'),
-  GET_BALANCE: buildFunctionId(MODULES.RATHER_TOKEN, 'get_balance'),
   BALANCE_OF: buildFunctionId(MODULES.RATHER_TOKEN, 'balance_of'),
   GET_TOTAL_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_supply'),
   GET_METADATA: buildFunctionId(MODULES.RATHER_TOKEN, 'get_metadata'),
