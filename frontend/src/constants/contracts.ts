@@ -74,6 +74,8 @@ export const POOL_FUNCTIONS = {
   GET_RESERVES: buildFunctionId(MODULES.POOL, 'get_reserves'),
   GET_FEE_INFO: buildFunctionId(MODULES.POOL, 'get_fee_info'),
   EXISTS_POOL: buildFunctionId(MODULES.POOL, 'exists_pool'),
+  QUOTE_SWAP_X_TO_Y: buildFunctionId(MODULES.POOL, 'quote_swap_x_to_y'),
+  QUOTE_SWAP_Y_TO_X: buildFunctionId(MODULES.POOL, 'quote_swap_y_to_x'),
 } as const;
 
 // Factory functions

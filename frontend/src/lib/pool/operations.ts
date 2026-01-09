@@ -254,19 +254,41 @@ export function calculateSwapOutput(
 }
 
 /**
- * Calculate quote for swapping RatherToken → WMOVE
+ * Calculate quote for swapping RatherToken → WMOVE using on-chain quote function
+ * Returns the net output amount after all fees (protocol + LP)
  */
 export async function quoteRatherToWmove(amountIn: number): Promise<number> {
-  const reserves = await fetchPoolReserves();
-  return calculateSwapOutput(amountIn, reserves.reserveX, reserves.reserveY);
+  try {
+    // quote_swap_x_to_y returns: (net_amount_out, protocol_fee, fee_token, lp_fee)
+    const result = await viewFunction<[string, string, string, string]>(
+      POOL_FUNCTIONS.QUOTE_SWAP_X_TO_Y,
+      [TYPE_ARGUMENTS.RATHER_TOKEN, TYPE_ARGUMENTS.WMOVE],
+      [amountIn]
+    );
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error quoting RatherToken to WMOVE swap:', error);
+    return 0;
+  }
 }
 
 /**
- * Calculate quote for swapping WMOVE → RatherToken
+ * Calculate quote for swapping WMOVE → RatherToken using on-chain quote function
+ * Returns the net output amount after all fees (protocol + LP)
  */
 export async function quoteWmoveToRather(amountIn: number): Promise<number> {
-  const reserves = await fetchPoolReserves();
-  return calculateSwapOutput(amountIn, reserves.reserveY, reserves.reserveX);
+  try {
+    // quote_swap_y_to_x returns: (net_amount_out, protocol_fee, fee_token, lp_fee)
+    const result = await viewFunction<[string, string, string, string]>(
+      POOL_FUNCTIONS.QUOTE_SWAP_Y_TO_X,
+      [TYPE_ARGUMENTS.RATHER_TOKEN, TYPE_ARGUMENTS.WMOVE],
+      [amountIn]
+    );
+    return Number(result[0]);
+  } catch (error) {
+    console.error('Error quoting WMOVE to RatherToken swap:', error);
+    return 0;
+  }
 }
 
 /**
