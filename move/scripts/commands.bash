@@ -19,7 +19,7 @@ movement move publish \
 
 
 ## Set the deployer and second address
-export MY_ADDR=0x9154cb2a67d450d566e5edfa1c8b711120b96f8ca3f9239f8c626be936dbb171
+export MY_ADDR=0x490729390a1dd4bf17f756d90d6223bc2ec8ba4ef9e10f1c9a5ece17244de0c2
 export RECIPIENT_ADDR=0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b
 
 # Wrap Move coin

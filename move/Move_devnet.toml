@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = ["Rather Labs Inc."]
 
 [addresses]
-nft_strategy_addr = "0x9154cb2a67d450d566e5edfa1c8b711120b96f8ca3f9239f8c626be936dbb171"
+nft_strategy_addr = "0x490729390a1dd4bf17f756d90d6223bc2ec8ba4ef9e10f1c9a5ece17244de0c2"
 # nft_strategy_addr = "_"
 
 [dev-addresses]
@@ -12,7 +12,8 @@ nft_strategy_addr = "0xbeef"
 
 [dependencies.AptosFramework]
 git = "https://github.com/movementlabsxyz/aptos-core.git"
-rev = "movement"
+# rev = "movement"
+rev = "9dfc8e7a3d622597dfd81cc4ba480a5377f87a41"
 subdir = "aptos-move/framework/aptos-framework"
 
 [dev-dependencies]
