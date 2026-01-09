@@ -15,6 +15,7 @@ import {
   FormLabel,
   Heading,
   HStack,
+  IconButton,
   Input,
   Link,
   NumberInput,
@@ -27,10 +28,11 @@ import {
   StatNumber,
   StatHelpText,
   Text,
+  useClipboard,
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { ExternalLinkIcon } from '@chakra-ui/icons';
+import { CopyIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/lib/wallet-context';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
@@ -39,10 +41,12 @@ import { addressesEqual } from '@/utils/formatting';
 import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
 import {
   fetchPoolReserves,
+  fetchPoolFeeInfo,
   fromOnChainAmount,
   toOnChainAmount,
   poolExists,
   buildCreatePoolTransaction,
+  buildSetPoolFeeRecipientTransaction,
 } from '@/lib/pool/operations';
 import {
   fetchMarketplaceInfo,
@@ -69,6 +73,119 @@ import {
   fetchTreasuryAddressPreview,
 } from '@/lib/strategy/operations';
 import { waitForTransaction } from '@/lib/movement-client';
+
+// Strategy Module Card Component with copy functionality
+interface StrategyModuleCardProps {
+  strategyInitialized: boolean | undefined;
+  strategyTreasuryAddress: string | null | undefined;
+  treasuryAddressPreview: string | null | undefined;
+  handleInitializeStrategy: () => Promise<void>;
+  isInitializingStrategy: boolean;
+}
+
+function StrategyModuleCard({
+  strategyInitialized,
+  strategyTreasuryAddress,
+  treasuryAddressPreview,
+  handleInitializeStrategy,
+  isInitializingStrategy,
+}: StrategyModuleCardProps) {
+  const { hasCopied, onCopy } = useClipboard(strategyTreasuryAddress || '');
+
+  return (
+    <Card>
+      <CardHeader>
+        <HStack justify="space-between">
+          <Heading size="md">Strategy Module</Heading>
+          <Badge colorScheme={strategyInitialized ? 'green' : 'yellow'}>
+            {strategyInitialized ? 'Initialized' : 'Not Initialized'}
+          </Badge>
+        </HStack>
+      </CardHeader>
+      <CardBody>
+        <VStack align="start" spacing={4}>
+          <Text fontSize="sm" color="gray.600">
+            The Strategy module enables automated floor buying and relisting of NFTs. When
+            initialized, it creates a treasury object that can hold WMOVE and execute buy/relist
+            actions on behalf of the protocol.
+          </Text>
+
+          {strategyInitialized ? (
+            <VStack align="start" spacing={3} w="100%">
+              <VStack align="start" spacing={1} w="100%">
+                <Text fontWeight="bold" fontSize="sm">
+                  Treasury Address:
+                </Text>
+                <HStack
+                  w="100%"
+                  p={3}
+                  bg="gray.50"
+                  borderRadius="md"
+                  border="1px"
+                  borderColor="gray.200"
+                  justify="space-between"
+                >
+                  <Text fontSize="sm" fontFamily="mono" wordBreak="break-all">
+                    {strategyTreasuryAddress}
+                  </Text>
+                  <IconButton
+                    aria-label="Copy treasury address"
+                    icon={<CopyIcon />}
+                    size="sm"
+                    variant="ghost"
+                    onClick={onCopy}
+                    colorScheme={hasCopied ? 'green' : 'gray'}
+                  />
+                </HStack>
+                {hasCopied && (
+                  <Text fontSize="xs" color="green.500">
+                    Copied to clipboard!
+                  </Text>
+                )}
+              </VStack>
+              <Text fontSize="xs" color="gray.500">
+                This is where WMOVE is held for floor buying operations.
+              </Text>
+              <Link
+                href={`https://explorer.movementnetwork.xyz/account/${strategyTreasuryAddress}?network=testnet`}
+                isExternal
+                color="blue.500"
+                fontSize="sm"
+              >
+                View Treasury on Explorer <ExternalLinkIcon mx="2px" />
+              </Link>
+            </VStack>
+          ) : (
+            <VStack align="start" spacing={4} w="100%">
+              <VStack align="start" spacing={1}>
+                <Text fontWeight="bold" fontSize="sm">
+                  Preview Treasury Address:
+                </Text>
+                <Text fontSize="sm" fontFamily="mono" color="gray.600" wordBreak="break-all">
+                  {treasuryAddressPreview || 'Computing...'}
+                </Text>
+                <Text fontSize="xs" color="gray.500">
+                  This address is deterministic based on your admin address.
+                </Text>
+              </VStack>
+              <Divider />
+              <Button
+                colorScheme="green"
+                onClick={handleInitializeStrategy}
+                isLoading={isInitializingStrategy}
+              >
+                Initialize Strategy
+              </Button>
+              <Text fontSize="xs" color="gray.500">
+                Note: Once initialized, the treasury address cannot be changed.
+              </Text>
+            </VStack>
+          )}
+        </VStack>
+      </CardBody>
+    </Card>
+  );
+}
 
 export default function AdminUtilitiesPage() {
   const toast = useToast();
@@ -104,6 +221,10 @@ export default function AdminUtilitiesPage() {
 
   // Strategy state
   const [isInitializingStrategy, setIsInitializingStrategy] = useState(false);
+
+  // Pool admin state
+  const [isUpdatingPoolFeeRecipient, setIsUpdatingPoolFeeRecipient] = useState(false);
+  const [newPoolFeeRecipient, setNewPoolFeeRecipient] = useState('');
 
   // Check if current user is the admin
   const isAdmin = useMemo(() => {
@@ -147,6 +268,14 @@ export default function AdminUtilitiesPage() {
     queryKey: ['pool-exists'],
     queryFn: () => poolExists(),
     enabled: connected,
+  });
+
+  // Fetch pool fee info
+  const { data: poolFeeInfo, refetch: refetchPoolFeeInfo } = useQuery({
+    queryKey: ['admin-pool-fee-info'],
+    queryFn: () => fetchPoolFeeInfo(),
+    enabled: connected && poolExistsData === true,
+    refetchInterval: 30000,
   });
 
   // Check if collection exists
@@ -196,6 +325,7 @@ export default function AdminUtilitiesPage() {
     void refetchPool();
     void refetchMarketplace();
     void refetchPoolExists();
+    void refetchPoolFeeInfo();
     void refetchMarketplaceInit();
     void refetchCollectionExists();
     void refetchCollection();
@@ -205,6 +335,7 @@ export default function AdminUtilitiesPage() {
     refetchPool,
     refetchMarketplace,
     refetchPoolExists,
+    refetchPoolFeeInfo,
     refetchMarketplaceInit,
     refetchCollectionExists,
     refetchCollection,
@@ -655,6 +786,36 @@ export default function AdminUtilitiesPage() {
     refetchStrategyTreasury,
   ]);
 
+  // Handle update pool fee recipient
+  const handleUpdatePoolFeeRecipient = useCallback(async () => {
+    if (!currentAddress || !newPoolFeeRecipient) return;
+
+    setIsUpdatingPoolFeeRecipient(true);
+    try {
+      const tx = buildSetPoolFeeRecipientTransaction(newPoolFeeRecipient);
+      const result = await signAndSubmitTransaction(tx);
+      await waitForTransaction(result.hash);
+
+      toast({
+        title: 'Pool fee recipient updated!',
+        description: `New recipient: ${newPoolFeeRecipient.slice(0, 10)}...`,
+        status: 'success',
+      });
+
+      setNewPoolFeeRecipient('');
+      void refetchPoolFeeInfo();
+    } catch (error: any) {
+      console.error('Update pool fee recipient error:', error);
+      toast({
+        title: 'Failed to update pool fee recipient',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsUpdatingPoolFeeRecipient(false);
+    }
+  }, [currentAddress, newPoolFeeRecipient, signAndSubmitTransaction, toast, refetchPoolFeeInfo]);
+
   if (!connected) {
     return (
       <Container maxW="container.md" py={10}>
@@ -698,6 +859,15 @@ export default function AdminUtilitiesPage() {
             Refresh All
           </Button>
         </HStack>
+
+        {/* Strategy Module - Moved to top for visibility */}
+        <StrategyModuleCard
+          strategyInitialized={strategyInitialized}
+          strategyTreasuryAddress={strategyTreasuryAddress}
+          treasuryAddressPreview={treasuryAddressPreview}
+          handleInitializeStrategy={handleInitializeStrategy}
+          isInitializingStrategy={isInitializingStrategy}
+        />
 
         {/* Create Pool Section */}
         <Card>
@@ -812,32 +982,109 @@ export default function AdminUtilitiesPage() {
             <Heading size="md">Liquidity Pool Status</Heading>
           </CardHeader>
           <CardBody>
-            {poolLoading ? (
-              <Center py={4}>
-                <Spinner />
-              </Center>
-            ) : poolReserves ? (
-              <VStack align="start" spacing={2}>
-                <HStack>
-                  <Text fontWeight="bold">RATHER Reserve:</Text>
-                  <Text>{fromOnChainAmount(poolReserves.reserveX).toLocaleString()}</Text>
-                </HStack>
-                <HStack>
-                  <Text fontWeight="bold">WMOVE Reserve:</Text>
-                  <Text>{fromOnChainAmount(poolReserves.reserveY).toLocaleString()}</Text>
-                </HStack>
-                <HStack>
-                  <Text fontWeight="bold">Last Update:</Text>
-                  <Text>
-                    {poolReserves.lastBlockTimestamp > 0
-                      ? new Date(poolReserves.lastBlockTimestamp * 1000).toLocaleString()
-                      : 'N/A'}
-                  </Text>
-                </HStack>
-              </VStack>
-            ) : (
-              <Text color="gray.500">No pool data available</Text>
-            )}
+            <VStack align="stretch" spacing={6}>
+              {poolLoading ? (
+                <Center py={4}>
+                  <Spinner />
+                </Center>
+              ) : poolReserves ? (
+                <VStack align="start" spacing={2}>
+                  <HStack>
+                    <Text fontWeight="bold">RATHER Reserve:</Text>
+                    <Text>{fromOnChainAmount(poolReserves.reserveX).toLocaleString()}</Text>
+                  </HStack>
+                  <HStack>
+                    <Text fontWeight="bold">WMOVE Reserve:</Text>
+                    <Text>{fromOnChainAmount(poolReserves.reserveY).toLocaleString()}</Text>
+                  </HStack>
+                  <HStack>
+                    <Text fontWeight="bold">Last Update:</Text>
+                    <Text>
+                      {poolReserves.lastBlockTimestamp > 0
+                        ? new Date(poolReserves.lastBlockTimestamp * 1000).toLocaleString()
+                        : 'N/A'}
+                    </Text>
+                  </HStack>
+                  {poolFeeInfo && (
+                    <>
+                      <HStack>
+                        <Text fontWeight="bold">Current Fee Recipient:</Text>
+                        <Text fontSize="sm" fontFamily="mono">
+                          {poolFeeInfo.feeRecipient.slice(0, 12)}...
+                          {poolFeeInfo.feeRecipient.slice(-8)}
+                        </Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="bold">Fee:</Text>
+                        <Text>
+                          {(poolFeeInfo.feeBps / 100).toFixed(2)}% ({poolFeeInfo.feeBps} BPS)
+                        </Text>
+                      </HStack>
+                    </>
+                  )}
+                </VStack>
+              ) : (
+                <Text color="gray.500">No pool data available</Text>
+              )}
+
+              {/* Update Pool Fee Recipient */}
+              {poolExistsData && (
+                <>
+                  <Divider />
+                  <VStack align="stretch" spacing={4}>
+                    <Text fontWeight="bold">Set Pool Fee Recipient (Treasury)</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      Update the pool fee recipient address to the Strategy Treasury. This allows
+                      protocol fees from swaps to be directed to the treasury for floor buying
+                      operations.
+                    </Text>
+                    {strategyInitialized && strategyTreasuryAddress && (
+                      <HStack
+                        p={3}
+                        bg="green.50"
+                        borderRadius="md"
+                        border="1px"
+                        borderColor="green.200"
+                      >
+                        <Text fontSize="sm" fontWeight="medium" color="green.700">
+                          Strategy Treasury:
+                        </Text>
+                        <Text fontSize="sm" fontFamily="mono" color="green.700">
+                          {strategyTreasuryAddress.slice(0, 12)}...
+                          {strategyTreasuryAddress.slice(-8)}
+                        </Text>
+                        <Button
+                          size="xs"
+                          colorScheme="green"
+                          variant="ghost"
+                          onClick={() => setNewPoolFeeRecipient(strategyTreasuryAddress)}
+                        >
+                          Use This
+                        </Button>
+                      </HStack>
+                    )}
+                    <HStack spacing={4} align="end">
+                      <FormControl flex={1}>
+                        <FormLabel>New Fee Recipient Address</FormLabel>
+                        <Input
+                          value={newPoolFeeRecipient}
+                          onChange={(e) => setNewPoolFeeRecipient(e.target.value)}
+                          placeholder="0x..."
+                        />
+                      </FormControl>
+                      <Button
+                        colorScheme="blue"
+                        onClick={handleUpdatePoolFeeRecipient}
+                        isLoading={isUpdatingPoolFeeRecipient}
+                        isDisabled={!newPoolFeeRecipient}
+                      >
+                        Update Recipient
+                      </Button>
+                    </HStack>
+                  </VStack>
+                </>
+              )}
+            </VStack>
           </CardBody>
         </Card>
 
@@ -1093,81 +1340,6 @@ export default function AdminUtilitiesPage() {
                   >
                     Batch Mint {batchCount} NFT{parseInt(batchCount) !== 1 ? 's' : ''}
                   </Button>
-                </VStack>
-              )}
-            </VStack>
-          </CardBody>
-        </Card>
-
-        {/* Strategy Module */}
-        <Card>
-          <CardHeader>
-            <HStack justify="space-between">
-              <Heading size="md">Strategy Module</Heading>
-              <Badge colorScheme={strategyInitialized ? 'green' : 'yellow'}>
-                {strategyInitialized ? 'Initialized' : 'Not Initialized'}
-              </Badge>
-            </HStack>
-          </CardHeader>
-          <CardBody>
-            <VStack align="start" spacing={4}>
-              <Text fontSize="sm" color="gray.600">
-                The Strategy module enables automated floor buying and relisting of NFTs. When
-                initialized, it creates a treasury object that can hold WMOVE and execute buy/relist
-                actions on behalf of the protocol.
-              </Text>
-
-              {strategyInitialized ? (
-                <VStack align="start" spacing={3} w="100%">
-                  <Stat>
-                    <StatLabel>Treasury Address</StatLabel>
-                    <StatNumber fontSize="md" fontFamily="mono">
-                      {strategyTreasuryAddress?.slice(0, 16)}...{strategyTreasuryAddress?.slice(-8)}
-                    </StatNumber>
-                    <StatHelpText>
-                      This is where WMOVE is held for floor buying operations.
-                    </StatHelpText>
-                  </Stat>
-                  <Link
-                    href={`https://explorer.movementnetwork.xyz/account/${strategyTreasuryAddress}?network=testnet`}
-                    isExternal
-                    color="blue.500"
-                    fontSize="sm"
-                  >
-                    View Treasury on Explorer <ExternalLinkIcon mx="2px" />
-                  </Link>
-                </VStack>
-              ) : (
-                <VStack align="start" spacing={4} w="100%">
-                  <VStack align="start" spacing={1}>
-                    <Text fontWeight="bold" fontSize="sm">
-                      Preview Treasury Address:
-                    </Text>
-                    <Text fontSize="sm" fontFamily="mono" color="gray.600">
-                      {treasuryAddressPreview ? (
-                        <>
-                          {treasuryAddressPreview.slice(0, 20)}...
-                          {treasuryAddressPreview.slice(-12)}
-                        </>
-                      ) : (
-                        'Computing...'
-                      )}
-                    </Text>
-                    <Text fontSize="xs" color="gray.500">
-                      This address is deterministic based on your admin address.
-                    </Text>
-                  </VStack>
-                  <Divider />
-                  <Button
-                    colorScheme="green"
-                    onClick={handleInitializeStrategy}
-                    isLoading={isInitializingStrategy}
-                  >
-                    Initialize Strategy
-                  </Button>
-                  <Text fontSize="xs" color="gray.500">
-                    Note: Once initialized, the treasury address cannot be changed.
-                  </Text>
                 </VStack>
               )}
             </VStack>

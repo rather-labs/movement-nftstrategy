@@ -141,6 +141,20 @@ export function buildSwapWmoveToRatherTransaction(
   };
 }
 
+/**
+ * Build transaction to set pool fee recipient
+ * @param newFeeRecipient - New fee recipient address
+ */
+export function buildSetPoolFeeRecipientTransaction(newFeeRecipient: string): InputTransactionData {
+  return {
+    data: {
+      function: POOL_FUNCTIONS.SET_FEE_RECIPIENT,
+      typeArguments: [TYPE_ARGUMENTS.RATHER_TOKEN, TYPE_ARGUMENTS.WMOVE],
+      functionArguments: [newFeeRecipient],
+    },
+  };
+}
+
 // ============ View Functions ============
 
 /**

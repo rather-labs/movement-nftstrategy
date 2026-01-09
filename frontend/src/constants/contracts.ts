@@ -68,6 +68,10 @@ export const POOL_FUNCTIONS = {
   REMOVE_LIQUIDITY_ENTRY: buildFunctionId(MODULES.POOL, 'remove_liquidity_entry'),
   SWAP_X_TO_Y_ENTRY: buildFunctionId(MODULES.POOL, 'swap_x_to_y_entry'),
   SWAP_Y_TO_X_ENTRY: buildFunctionId(MODULES.POOL, 'swap_y_to_x_entry'),
+  SET_FEE_RECIPIENT: buildFunctionId(MODULES.POOL, 'set_fee_recipient'),
+  SET_FEE_BPS: buildFunctionId(MODULES.POOL, 'set_fee_bps'),
+  SET_FEE_TOKEN: buildFunctionId(MODULES.POOL, 'set_fee_token'),
+  SET_ADMIN: buildFunctionId(MODULES.POOL, 'set_admin'),
   // View functions
   GET_RESERVES: buildFunctionId(MODULES.POOL, 'get_reserves'),
   GET_FEE_INFO: buildFunctionId(MODULES.POOL, 'get_fee_info'),
