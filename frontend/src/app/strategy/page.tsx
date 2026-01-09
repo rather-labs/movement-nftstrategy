@@ -172,6 +172,11 @@ export default function StrategyDashboard() {
     return (burnedRather / totalSupplyRather) * 100;
   }, [burnedRather, totalSupplyRather]);
 
+  const moduleAddress = MODULE_ADDRESS ?? '';
+  const moduleAddressDisplay = moduleAddress
+    ? `${moduleAddress.slice(0, 8)}…${moduleAddress.slice(-6)}`
+    : 'Not configured';
+
   const refreshAll = useCallback(() => {
     void refetchPool();
     void refetchMetrics();
@@ -361,13 +366,17 @@ export default function StrategyDashboard() {
               <Stat>
                 <StatLabel>Module Address</StatLabel>
                 <StatNumber fontSize="lg">
-                  <Link
-                    color="link.primary"
-                    href={getAccountExplorerLink(MODULE_ADDRESS)}
-                    isExternal
-                  >
-                    {MODULE_ADDRESS.slice(0, 8)}…{MODULE_ADDRESS.slice(-6)}
-                  </Link>
+                  {moduleAddress ? (
+                    <Link
+                      color="link.primary"
+                      href={getAccountExplorerLink(moduleAddress)}
+                      isExternal
+                    >
+                      {moduleAddressDisplay}
+                    </Link>
+                  ) : (
+                    <Text color="text.secondary">Module address not configured</Text>
+                  )}
                 </StatNumber>
                 <StatHelpText mt={2}>
                   <Badge colorScheme="purple">Movement Testnet</Badge>
