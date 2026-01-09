@@ -5,7 +5,6 @@ import {
   Badge,
   Box,
   Button,
-
   Card,
   CardBody,
   CardHeader,
@@ -13,12 +12,9 @@ import {
   Divider,
   FormControl,
   FormLabel,
-  Grid,
-  GridItem,
   Heading,
   HStack,
   IconButton,
-  Input,
   Link,
   Modal,
   ModalBody,
@@ -43,8 +39,9 @@ import { ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, ViewIcon } from '@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/lib/wallet-context';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
-import { useNftHoldings, NftHolding } from '@/hooks/useNftHoldings';
+import { useNftHoldings, useListedNfts, NftHolding, ListedNft } from '@/hooks/useNftHoldings';
 import { getExplorerLink } from '@/utils/explorer-links';
+import { addressesEqual } from '@/utils/formatting';
 import { waitForTransaction } from '@/lib/movement-client';
 import { TokenImage } from '@/components/nft/TokenImage';
 import {
@@ -362,6 +359,86 @@ function NftCard({
   );
 }
 
+// ============ Buy NFT Card ============
+interface BuyNftCardProps {
+  nft: ListedNft;
+  currentAddress: string | null;
+  onBuy: (nftAddress: string) => Promise<void>;
+  isBuying: boolean;
+}
+
+function BuyNftCard({ nft, currentAddress, onBuy, isBuying }: BuyNftCardProps) {
+  const isOwnListing = currentAddress ? addressesEqual(nft.seller, currentAddress) : false;
+
+  return (
+    <Card
+      overflow="hidden"
+      transition="all 0.2s"
+      _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+    >
+      <Box position="relative">
+        <TokenImage nftAddress={nft.nftAddress} alt={`NFT #${nft.tokenId}`} />
+        <Badge position="absolute" top={2} right={2} colorScheme="green" fontSize="xs">
+          For Sale
+        </Badge>
+      </Box>
+      <CardBody>
+        <VStack align="stretch" spacing={3}>
+          <Heading size="sm">NFT #{nft.tokenId}</Heading>
+
+          <Text fontSize="xs" color="gray.500" noOfLines={1} fontFamily="mono">
+            {nft.nftAddress.slice(0, 16)}...{nft.nftAddress.slice(-8)}
+          </Text>
+
+          <Box bg="green.50" p={3} borderRadius="md" _dark={{ bg: 'green.900' }}>
+            <VStack align="stretch" spacing={1}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.300' }}>
+                  Price:
+                </Text>
+                <Text
+                  fontSize="md"
+                  fontWeight="bold"
+                  color="green.600"
+                  _dark={{ color: 'green.200' }}
+                >
+                  {fromOnChainAmount(nft.price).toFixed(4)} MOVE
+                </Text>
+              </HStack>
+              <HStack justify="space-between">
+                <Text fontSize="xs" color="gray.500">
+                  Seller:
+                </Text>
+                <Text fontSize="xs" fontFamily="mono" color="gray.500">
+                  {nft.seller.slice(0, 6)}...{nft.seller.slice(-4)}
+                </Text>
+              </HStack>
+            </VStack>
+          </Box>
+
+          <Divider />
+
+          {isOwnListing ? (
+            <Text fontSize="sm" color="gray.500" textAlign="center">
+              This is your listing
+            </Text>
+          ) : (
+            <Button
+              colorScheme="purple"
+              size="sm"
+              width="100%"
+              onClick={() => onBuy(nft.nftAddress)}
+              isLoading={isBuying}
+            >
+              Buy Now
+            </Button>
+          )}
+        </VStack>
+      </CardBody>
+    </Card>
+  );
+}
+
 // ============ Main Component ============
 export default function MarketplacePage() {
   const toast = useToast();
@@ -376,6 +453,15 @@ export default function MarketplacePage() {
 
   const nfts = nftHoldings?.items || [];
 
+  // Fetch all listed NFTs for the marketplace
+  const {
+    data: listedNftsData,
+    isLoading: listedNftsLoading,
+    refetch: refetchListedNfts,
+  } = useListedNfts();
+
+  const listedNfts = listedNftsData?.items || [];
+
   // Modal state
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedNft, setSelectedNft] = useState<NftWithListing | null>(null);
@@ -383,15 +469,17 @@ export default function MarketplacePage() {
   // Filter state
   const [filter, setFilter] = useState<ListingFilter>('all');
 
-  // Pagination state
+  // Pagination state for My NFTs
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Pagination state for Buy NFTs
+  const [buyPage, setBuyPage] = useState(1);
 
   // Track pending action to prevent double-clicks
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   // Buy NFT state
-  const [buyNftAddress, setBuyNftAddress] = useState('');
-  const [isBuying, setIsBuying] = useState(false);
+  const [buyingNftAddress, setBuyingNftAddress] = useState<string | null>(null);
 
   // Fetch listing status for all user NFTs
   const {
@@ -416,13 +504,6 @@ export default function MarketplacePage() {
     },
     enabled: nfts.length > 0,
     refetchInterval: 15000,
-  });
-
-  // Fetch listing data for buy section
-  const { data: buyListingData, isLoading: buyListingLoading } = useQuery({
-    queryKey: ['buy-listing', buyNftAddress],
-    queryFn: () => fetchListing(buyNftAddress),
-    enabled: buyNftAddress.length >= 60,
   });
 
   // Combine NFTs with listing data
@@ -542,6 +623,7 @@ export default function MarketplacePage() {
 
         void refetchListings();
         void refetchNfts();
+        void refetchListedNfts();
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Transaction failed';
         toast({
@@ -553,60 +635,76 @@ export default function MarketplacePage() {
         setPendingAction(null);
       }
     },
-    [currentAddress, signAndSubmitTransaction, toast, refetchListings, refetchNfts]
+    [
+      currentAddress,
+      signAndSubmitTransaction,
+      toast,
+      refetchListings,
+      refetchNfts,
+      refetchListedNfts,
+    ]
   );
 
-  // Handle buy NFT
-  const handleBuyNft = useCallback(async () => {
-    if (!currentAddress || !buyNftAddress || !buyListingData) return;
+  // Handle buy NFT from listed NFTs
+  const handleBuyNft = useCallback(
+    async (nftAddress: string) => {
+      if (!currentAddress) return;
 
-    setIsBuying(true);
-    try {
-      const txPayload = buildBuyNftTransaction(buyNftAddress);
-      const response = await signAndSubmitTransaction(txPayload);
+      setBuyingNftAddress(nftAddress);
+      try {
+        const txPayload = buildBuyNftTransaction(nftAddress);
+        const response = await signAndSubmitTransaction(txPayload);
 
-      toast({
-        title: 'Transaction submitted',
-        description: 'Purchasing NFT...',
-        status: 'info',
-        duration: 5000,
-      });
+        toast({
+          title: 'Transaction submitted',
+          description: 'Purchasing NFT...',
+          status: 'info',
+          duration: 5000,
+        });
 
-      await waitForTransaction(response.hash);
+        await waitForTransaction(response.hash);
 
-      toast({
-        title: 'NFT purchased!',
-        description: (
-          <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
-            View on Explorer <ExternalLinkIcon mx="2px" />
-          </Link>
-        ),
-        status: 'success',
-        duration: 10000,
-      });
+        toast({
+          title: 'NFT purchased!',
+          description: (
+            <Link href={getExplorerLink(response.hash, 'testnet')} isExternal>
+              View on Explorer <ExternalLinkIcon mx="2px" />
+            </Link>
+          ),
+          status: 'success',
+          duration: 10000,
+        });
 
-      setBuyNftAddress('');
-      void refetchNfts();
-      void refetchListings();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Transaction failed';
-      toast({
-        title: 'Purchase failed',
-        description: message,
-        status: 'error',
-      });
-    } finally {
-      setIsBuying(false);
-    }
-  }, [
-    currentAddress,
-    buyNftAddress,
-    buyListingData,
-    signAndSubmitTransaction,
-    toast,
-    refetchNfts,
-    refetchListings,
-  ]);
+        void refetchNfts();
+        void refetchListings();
+        void refetchListedNfts();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Transaction failed';
+        toast({
+          title: 'Purchase failed',
+          description: message,
+          status: 'error',
+        });
+      } finally {
+        setBuyingNftAddress(null);
+      }
+    },
+    [
+      currentAddress,
+      signAndSubmitTransaction,
+      toast,
+      refetchNfts,
+      refetchListings,
+      refetchListedNfts,
+    ]
+  );
+
+  // Pagination for Buy NFTs section
+  const buyTotalPages = Math.ceil(listedNfts.length / ITEMS_PER_PAGE);
+  const paginatedListedNfts = useMemo(() => {
+    const startIdx = (buyPage - 1) * ITEMS_PER_PAGE;
+    return listedNfts.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+  }, [listedNfts, buyPage]);
 
   return (
     <Container maxW="container.xl" py={10}>
@@ -711,87 +809,70 @@ export default function MarketplacePage() {
         {/* Buy NFT Section */}
         <Card>
           <CardHeader>
-            <Heading size="md">Buy NFT</Heading>
+            <HStack justify="space-between" wrap="wrap" gap={4}>
+              <VStack align="start" spacing={1}>
+                <HStack>
+                  <Heading size="md">Buy NFTs</Heading>
+                  <Badge colorScheme="green">{listedNfts.length}</Badge>
+                </HStack>
+                <Text fontSize="sm" color="gray.500">
+                  Browse and purchase NFTs listed for sale on the marketplace.
+                </Text>
+              </VStack>
+            </HStack>
           </CardHeader>
           <CardBody>
-            <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={6}>
-              <GridItem>
-                <VStack spacing={4} align="stretch">
-                  <Text fontSize="sm" color="gray.500">
-                    Enter an NFT address to view its listing details and purchase it.
-                  </Text>
-                  <FormControl>
-                    <FormLabel>NFT Object Address</FormLabel>
-                    <Input
-                      value={buyNftAddress}
-                      onChange={(e) => setBuyNftAddress(e.target.value)}
-                      placeholder="0x..."
+            {listedNftsLoading ? (
+              <Center py={8}>
+                <Spinner size="lg" />
+              </Center>
+            ) : paginatedListedNfts.length > 0 ? (
+              <VStack spacing={6}>
+                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4} width="100%">
+                  {paginatedListedNfts.map((nft) => (
+                    <BuyNftCard
+                      key={nft.nftAddress}
+                      nft={nft}
+                      currentAddress={currentAddress}
+                      onBuy={handleBuyNft}
+                      isBuying={buyingNftAddress === nft.nftAddress}
                     />
-                  </FormControl>
+                  ))}
+                </SimpleGrid>
 
-                  {buyListingLoading && buyNftAddress.length >= 60 && (
-                    <Center py={4}>
-                      <Spinner size="sm" />
-                    </Center>
-                  )}
-
-                  {buyListingData && (
-                    <Box p={4} bg="gray.50" borderRadius="md" _dark={{ bg: 'gray.700' }}>
-                      <VStack align="stretch" spacing={2}>
-                        <HStack justify="space-between">
-                          <Text color="gray.500">Price:</Text>
-                          <Text fontWeight="bold">
-                            {fromOnChainAmount(buyListingData.price).toFixed(4)} MOVE
-                          </Text>
-                        </HStack>
-                        <HStack justify="space-between">
-                          <Text color="gray.500">Seller:</Text>
-                          <Text fontSize="sm" noOfLines={1} fontFamily="mono">
-                            {buyListingData.seller.slice(0, 10)}...{buyListingData.seller.slice(-8)}
-                          </Text>
-                        </HStack>
-                      </VStack>
-                    </Box>
-                  )}
-
-                  {buyNftAddress.length >= 60 && !buyListingLoading && !buyListingData && (
-                    <Text color="orange.500" fontSize="sm">
-                      This NFT is not currently listed for sale
+                {/* Pagination */}
+                {buyTotalPages > 1 && (
+                  <HStack spacing={4}>
+                    <IconButton
+                      aria-label="Previous page"
+                      icon={<ChevronLeftIcon />}
+                      onClick={() => setBuyPage((p) => Math.max(1, p - 1))}
+                      isDisabled={buyPage === 1}
+                      size="sm"
+                    />
+                    <Text fontSize="sm" color="gray.500">
+                      Page {buyPage} of {buyTotalPages}
                     </Text>
-                  )}
-
-                  <Button
-                    colorScheme="purple"
-                    onClick={handleBuyNft}
-                    isLoading={isBuying}
-                    isDisabled={!buyNftAddress || !buyListingData || !connected}
-                  >
-                    Buy NFT
-                  </Button>
-                </VStack>
-              </GridItem>
-
-              {/* NFT Preview Image */}
-              <GridItem>
-                {buyNftAddress.length >= 60 ? (
-                  <Box borderRadius="lg" overflow="hidden">
-                    <TokenImage nftAddress={buyNftAddress} alt="NFT Preview" />
-                  </Box>
-                ) : (
-                  <Center
-                    h="100%"
-                    minH="200px"
-                    bg="gray.50"
-                    borderRadius="lg"
-                    _dark={{ bg: 'gray.700' }}
-                  >
-                    <Text color="gray.400" fontSize="sm">
-                      Enter an NFT address to preview
-                    </Text>
-                  </Center>
+                    <IconButton
+                      aria-label="Next page"
+                      icon={<ChevronRightIcon />}
+                      onClick={() => setBuyPage((p) => Math.min(buyTotalPages, p + 1))}
+                      isDisabled={buyPage === buyTotalPages}
+                      size="sm"
+                    />
+                  </HStack>
                 )}
-              </GridItem>
-            </Grid>
+              </VStack>
+            ) : (
+              <Center py={8}>
+                <VStack spacing={2}>
+                  <Text color="gray.500">No NFTs are currently listed for sale</Text>
+                  <Text fontSize="sm" color="gray.400">
+                    Check back later or list your own NFTs above
+                  </Text>
+                </VStack>
+              </Center>
+            )}
           </CardBody>
         </Card>
       </VStack>

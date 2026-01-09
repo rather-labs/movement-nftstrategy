@@ -159,6 +159,139 @@ export const useNftHoldings = (address?: string): UseQueryResult<NftHoldingsResu
   });
 };
 
+// Listed NFT information (for marketplace)
+export interface ListedNft {
+  nftAddress: string;
+  tokenId: number;
+  collectionAddress: string;
+  seller: string;
+  price: number;
+}
+
+// Response type for listed NFTs query
+export interface ListedNftsResult {
+  items: ListedNft[];
+  total: number;
+}
+
+/**
+ * Hook to fetch all listed NFTs from the marketplace
+ * Iterates through all minted NFTs and checks if they are listed
+ */
+export const useListedNfts = (): UseQueryResult<ListedNftsResult> => {
+  const { network } = useWallet();
+
+  return useQuery<ListedNftsResult>({
+    queryKey: ['listedNfts', network?.chainId],
+    queryFn: async () => {
+      const client = getAptosClient();
+
+      try {
+        // First, get the collection address
+        const collectionAddrResult = await client.view({
+          payload: {
+            function: NFT_FUNCTIONS.GET_COLLECTION_ADDRESS as `${string}::${string}::${string}`,
+            typeArguments: [],
+            functionArguments: [MODULE_ADDRESS],
+          },
+        });
+
+        const collectionAddress = collectionAddrResult[0] as string;
+
+        // Get current supply to know how many NFTs exist
+        const supplyResult = await client.view({
+          payload: {
+            function: NFT_FUNCTIONS.GET_CURRENT_SUPPLY as `${string}::${string}::${string}`,
+            typeArguments: [],
+            functionArguments: [collectionAddress],
+          },
+        });
+
+        const currentSupply = Number(supplyResult[0]);
+
+        if (currentSupply === 0) {
+          return { items: [], total: 0 };
+        }
+
+        // Iterate through all token IDs and check if listed
+        const listedNfts: ListedNft[] = [];
+
+        // Process in batches to avoid too many parallel requests
+        const batchSize = 10;
+        for (let startId = 1; startId <= currentSupply; startId += batchSize) {
+          const endId = Math.min(startId + batchSize - 1, currentSupply);
+          const promises: Promise<void>[] = [];
+
+          for (let tokenId = startId; tokenId <= endId; tokenId++) {
+            promises.push(
+              (async () => {
+                try {
+                  // Get NFT address by token ID
+                  const nftAddrResult = await client.view({
+                    payload: {
+                      function:
+                        NFT_FUNCTIONS.GET_NFT_BY_TOKEN_ID as `${string}::${string}::${string}`,
+                      typeArguments: [],
+                      functionArguments: [collectionAddress, tokenId.toString()],
+                    },
+                  });
+
+                  const nftAddress = nftAddrResult[0] as string;
+
+                  // Check if this NFT is listed
+                  try {
+                    const listingResult = await client.view({
+                      payload: {
+                        function:
+                          MARKETPLACE_FUNCTIONS.GET_LISTING as `${string}::${string}::${string}`,
+                        typeArguments: [],
+                        functionArguments: [nftAddress],
+                      },
+                    });
+
+                    const seller = listingResult[0] as string;
+                    const price = Number(listingResult[1]);
+
+                    listedNfts.push({
+                      nftAddress,
+                      tokenId,
+                      collectionAddress,
+                      seller,
+                      price,
+                    });
+                  } catch {
+                    // NFT is not listed, skip
+                  }
+                } catch (error) {
+                  // NFT might have been burned, skip it
+                  console.debug(`Error checking NFT #${tokenId}:`, error);
+                }
+              })()
+            );
+          }
+
+          await Promise.all(promises);
+        }
+
+        // Sort by token ID
+        listedNfts.sort((a, b) => a.tokenId - b.tokenId);
+
+        return {
+          items: listedNfts,
+          total: listedNfts.length,
+        };
+      } catch (error) {
+        console.error('Error fetching listed NFTs:', error);
+        return { items: [], total: 0 };
+      }
+    },
+    retry: false,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    staleTime: 10000,
+  });
+};
+
 /**
  * Hook to track a transaction by hash
  */
