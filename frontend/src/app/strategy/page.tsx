@@ -36,16 +36,19 @@ import { getExplorerLink, getAccountExplorerLink } from '@/utils/explorer-links'
 import { waitForTransaction } from '@/lib/movement-client';
 import {
   buildMintRatherTokenTransaction,
+  buildBuyFloorAndRelistTransaction,
   fetchLpTokenBalance,
   fetchRatherTokenBalance,
   fetchRatherTokenStats,
   fetchStrategyMetrics,
   fetchTreasuryWmoveBalance,
   fetchTreasuryRatherBalance,
+  fetchStrategyTreasuryWmoveBalance,
+  isStrategyInitialized,
 } from '@/lib/strategy/operations';
 import { fetchPoolReserves, fromOnChainAmount, toOnChainAmount } from '@/lib/pool/operations';
 import { MODULE_ADDRESS, TREASURY_ADDRESS } from '@/constants/contracts';
-import { useNftHoldings } from '@/hooks/useNftHoldings';
+import { useNftHoldings, useFloorListing } from '@/hooks/useNftHoldings';
 import { TokenImage } from '@/components/nft/TokenImage';
 
 export default function StrategyDashboard() {
@@ -122,6 +125,13 @@ export default function StrategyDashboard() {
     refetchInterval: 15000,
   });
 
+  // Floor listing from marketplace
+  const {
+    data: floorListingData,
+    isLoading: floorListingLoading,
+    refetch: refetchFloorListing,
+  } = useFloorListing();
+
   // Strategy's NFT holdings (owned by deployer/MODULE_ADDRESS)
   const { data: strategyNfts, isLoading: nftsLoading } = useNftHoldings(MODULE_ADDRESS);
 
@@ -147,15 +157,25 @@ export default function StrategyDashboard() {
     return fromOnChainAmount(treasuryRather);
   }, [treasuryRather]);
 
+  // Floor listing from marketplace - get the cheapest listed NFT
+  const floorListing = useMemo(() => {
+    return floorListingData?.floor ?? null;
+  }, [floorListingData]);
+
   const floorPrice = useMemo(() => {
-    // TODO: Implement floor listing detection via indexer
-    return null as number | null;
-  }, []);
+    if (!floorListing) return null;
+    return fromOnChainAmount(floorListing.price);
+  }, [floorListing]);
 
   const purchaseProgress = useMemo(() => {
     if (!floorPrice || treasuryBalance <= 0) return 0;
     return Math.min((treasuryBalance / floorPrice) * 100, 100);
   }, [treasuryBalance, floorPrice]);
+
+  const canExecuteBuyFloor = useMemo(() => {
+    // Can execute if there's a floor listing and treasury has enough WMOVE
+    return floorListing !== null && floorPrice !== null && treasuryBalance >= floorPrice;
+  }, [floorListing, floorPrice, treasuryBalance]);
 
   // RATHER token stats from on-chain data
   const burnedRather = useMemo(() => {
@@ -184,6 +204,7 @@ export default function StrategyDashboard() {
     void refetchTreasuryWmove();
     void refetchTreasuryRather();
     void refetchRatherStats();
+    void refetchFloorListing();
   }, [
     refetchPool,
     refetchMetrics,
@@ -191,6 +212,7 @@ export default function StrategyDashboard() {
     refetchTreasuryWmove,
     refetchTreasuryRather,
     refetchRatherStats,
+    refetchFloorListing,
   ]);
 
   const handleBuyFloor = useCallback(async () => {
@@ -203,7 +225,7 @@ export default function StrategyDashboard() {
       return;
     }
 
-    if (!floorPrice) {
+    if (!floorListing || !floorPrice) {
       toast({
         title: 'No floor listing available',
         description: 'The marketplace does not currently have a floor listing to purchase.',
@@ -212,14 +234,44 @@ export default function StrategyDashboard() {
       return;
     }
 
+    if (!canExecuteBuyFloor) {
+      toast({
+        title: 'Insufficient treasury balance',
+        description: `Treasury needs ${floorPrice.toFixed(4)} WMOVE but only has ${treasuryBalance.toFixed(4)} WMOVE.`,
+        status: 'warning',
+      });
+      return;
+    }
+
     setIsBuyingFloor(true);
     try {
-      // TODO: Implement buy and relist transaction
+      // Build the buy floor and relist transaction
+      const transaction = buildBuyFloorAndRelistTransaction(floorListing.nftAddress);
+
+      // Sign and submit the transaction
+      const response = await signAndSubmitTransaction(transaction);
+      const txHash = response.hash;
+      setPendingBuyTxId(txHash);
+
       toast({
-        title: 'Coming soon',
-        description: 'Buy floor & relist functionality is under development.',
+        title: 'Transaction submitted',
+        description: `Buying floor NFT #${floorListing.tokenId} and relisting with 10% premium...`,
         status: 'info',
+        duration: 5000,
       });
+
+      // Wait for transaction confirmation
+      await waitForTransaction(txHash);
+
+      toast({
+        title: 'Floor buy & relist successful!',
+        description: `Purchased NFT #${floorListing.tokenId} for ${floorPrice.toFixed(4)} MOVE and relisted at ${(floorPrice * 1.1).toFixed(4)} MOVE.`,
+        status: 'success',
+        duration: 8000,
+      });
+
+      // Refresh all data
+      refreshAll();
     } catch (error: any) {
       toast({
         title: 'Buy floor failed',
@@ -229,7 +281,16 @@ export default function StrategyDashboard() {
     } finally {
       setIsBuyingFloor(false);
     }
-  }, [currentAddress, floorPrice, toast]);
+  }, [
+    currentAddress,
+    floorListing,
+    floorPrice,
+    canExecuteBuyFloor,
+    treasuryBalance,
+    signAndSubmitTransaction,
+    refreshAll,
+    toast,
+  ]);
 
   const handleBurn = useCallback(async () => {
     if (!currentAddress) {
@@ -314,18 +375,30 @@ export default function StrategyDashboard() {
                 <Stat>
                   <StatLabel>Floor Listing</StatLabel>
                   <StatNumber>
-                    {metricsLoading
+                    {floorListingLoading
                       ? '—'
                       : floorPrice !== null
-                        ? `${floorPrice.toFixed(2)} WMOVE`
+                        ? `${floorPrice.toFixed(4)} MOVE`
                         : 'No listings'}
                   </StatNumber>
                 </Stat>
-                {metrics?.floorListing && (
-                  <Text fontSize="sm" color="text.secondary">
-                    NFT {metrics.floorListing.nftAddress.slice(0, 8)}… by{' '}
-                    {metrics.floorListing.seller?.slice(0, 6)}…
-                  </Text>
+                {floorListing && (
+                  <HStack spacing={3}>
+                    <Box w="48px" h="48px" borderRadius="md" overflow="hidden" flexShrink={0}>
+                      <TokenImage
+                        nftAddress={floorListing.nftAddress}
+                        alt={`NFT #${floorListing.tokenId}`}
+                      />
+                    </Box>
+                    <Stack spacing={0}>
+                      <Text fontSize="sm" fontWeight="medium">
+                        Robot #{floorListing.tokenId}
+                      </Text>
+                      <Text fontSize="xs" color="text.tertiary">
+                        Seller: {floorListing.seller.slice(0, 6)}…{floorListing.seller.slice(-4)}
+                      </Text>
+                    </Stack>
+                  </HStack>
                 )}
                 <Stack spacing={2}>
                   <Text fontSize="sm" color="text.secondary">
@@ -333,17 +406,19 @@ export default function StrategyDashboard() {
                   </Text>
                   <Progress
                     value={purchaseProgress}
-                    colorScheme="purple"
+                    colorScheme={canExecuteBuyFloor ? 'green' : 'purple'}
                     size="sm"
                     borderRadius="full"
-                    isIndeterminate={metricsLoading}
+                    isIndeterminate={floorListingLoading}
                   />
                   <Text fontSize="xs" color="text.tertiary">
-                    {metricsLoading
-                      ? 'Calculating progress…'
+                    {floorListingLoading
+                      ? 'Scanning marketplace…'
                       : floorPrice
-                        ? `${purchaseProgress.toFixed(0)}% of ${floorPrice.toFixed(2)} WMOVE target`
-                        : 'No active marketplace listing detected.'}
+                        ? canExecuteBuyFloor
+                          ? `✓ Ready! ${treasuryBalance.toFixed(4)} / ${floorPrice.toFixed(4)} WMOVE`
+                          : `${purchaseProgress.toFixed(0)}% — Need ${(floorPrice - treasuryBalance).toFixed(4)} more WMOVE`
+                        : 'No active marketplace listings detected.'}
                   </Text>
                 </Stack>
                 {pendingBuyTxId && (
@@ -393,18 +468,32 @@ export default function StrategyDashboard() {
               <Stack spacing={2}>
                 <Heading size="md">Strategy Actions</Heading>
                 <Text fontSize="sm" color="text.secondary">
-                  Execute the automated steps directly from your connected wallet.
+                  Execute automated strategy steps. Any user can trigger these actions on behalf of
+                  the treasury.
                 </Text>
               </Stack>
               <HStack spacing={3}>
-                <Button
-                  colorScheme="purple"
-                  onClick={handleBuyFloor}
-                  isLoading={isBuyingFloor}
-                  isDisabled={!floorPrice || !currentAddress}
+                <Tooltip
+                  label={
+                    !currentAddress
+                      ? 'Connect wallet to execute'
+                      : !floorListing
+                        ? 'No floor listing available'
+                        : !canExecuteBuyFloor
+                          ? `Need ${floorPrice ? (floorPrice - treasuryBalance).toFixed(4) : '0'} more WMOVE`
+                          : `Buy NFT #${floorListing?.tokenId} for ${floorPrice?.toFixed(4)} MOVE and relist at ${(floorPrice! * 1.1).toFixed(4)} MOVE`
+                  }
+                  hasArrow
                 >
-                  Buy Floor &amp; Relist
-                </Button>
+                  <Button
+                    colorScheme={canExecuteBuyFloor ? 'green' : 'purple'}
+                    onClick={handleBuyFloor}
+                    isLoading={isBuyingFloor}
+                    isDisabled={!canExecuteBuyFloor || !currentAddress}
+                  >
+                    Buy Floor &amp; Relist
+                  </Button>
+                </Tooltip>
                 <Button
                   colorScheme="red"
                   variant="outline"

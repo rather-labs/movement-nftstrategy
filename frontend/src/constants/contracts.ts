@@ -113,6 +113,20 @@ export const WMOVE_FUNCTIONS = {
   BALANCE_OF: buildFunctionId(MODULES.WMOVE, 'balance_of'),
 } as const;
 
+// Strategy functions
+export const STRATEGY_FUNCTIONS = {
+  INITIALIZE: buildFunctionId('strategy', 'initialize'),
+  BUY_FLOOR_AND_RELIST: buildFunctionId('strategy', 'buy_floor_and_relist'),
+  DEPOSIT_WMOVE: buildFunctionId('strategy', 'deposit_wmove'),
+  WRAP_AND_DEPOSIT: buildFunctionId('strategy', 'wrap_and_deposit'),
+  // View functions
+  GET_STRATEGY_INFO: buildFunctionId('strategy', 'get_strategy_info'),
+  GET_TREASURY_ADDRESS: buildFunctionId('strategy', 'get_treasury_address'),
+  GET_TREASURY_ADDRESS_PREVIEW: buildFunctionId('strategy', 'get_treasury_address_preview'),
+  GET_TREASURY_WMOVE_BALANCE: buildFunctionId('strategy', 'get_treasury_wmove_balance'),
+  IS_INITIALIZED: buildFunctionId('strategy', 'is_initialized'),
+} as const;
+
 // Type arguments for pool operations
 export const TYPE_ARGUMENTS = {
   NFT: `${MODULE_ADDRESS}::${MODULES.NFT_COLLECTION}::NFT`,
@@ -122,4 +136,4 @@ export const TYPE_ARGUMENTS = {
 
 // Treasury address for strategy fees
 export const TREASURY_ADDRESS =
-  '0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b';
+  '0xf91c78b42b0856c7ef9b0870195a7ad942efe679db99ebe6692fc3a5731b0b77';

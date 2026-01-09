@@ -61,7 +61,13 @@ import {
   getCollectionInfo,
   CollectionInfo,
 } from '@/lib/nft/operations';
-import { buildMintRatherTokenTransaction } from '@/lib/strategy/operations';
+import {
+  buildMintRatherTokenTransaction,
+  buildInitializeStrategyTransaction,
+  isStrategyInitialized,
+  fetchStrategyTreasuryAddress,
+  fetchTreasuryAddressPreview,
+} from '@/lib/strategy/operations';
 import { waitForTransaction } from '@/lib/movement-client';
 
 export default function AdminUtilitiesPage() {
@@ -95,6 +101,9 @@ export default function AdminUtilitiesPage() {
   const [isBatchMinting, setIsBatchMinting] = useState(false);
   const [batchRecipient, setBatchRecipient] = useState('');
   const [batchCount, setBatchCount] = useState('1');
+
+  // Strategy state
+  const [isInitializingStrategy, setIsInitializingStrategy] = useState(false);
 
   // Check if current user is the admin
   const isAdmin = useMemo(() => {
@@ -162,6 +171,27 @@ export default function AdminUtilitiesPage() {
     refetchInterval: 30000,
   });
 
+  // Check if strategy is initialized
+  const { data: strategyInitialized, refetch: refetchStrategyInit } = useQuery({
+    queryKey: ['strategy-initialized'],
+    queryFn: () => isStrategyInitialized(),
+    enabled: connected,
+  });
+
+  // Fetch strategy treasury address (if initialized)
+  const { data: strategyTreasuryAddress, refetch: refetchStrategyTreasury } = useQuery({
+    queryKey: ['strategy-treasury-address'],
+    queryFn: () => fetchStrategyTreasuryAddress(),
+    enabled: connected && strategyInitialized === true,
+  });
+
+  // Preview treasury address (before initialization)
+  const { data: treasuryAddressPreview } = useQuery({
+    queryKey: ['treasury-address-preview', currentAddress],
+    queryFn: () => fetchTreasuryAddressPreview(currentAddress!),
+    enabled: connected && !!currentAddress && strategyInitialized === false,
+  });
+
   const refreshAll = useCallback(() => {
     void refetchPool();
     void refetchMarketplace();
@@ -169,6 +199,8 @@ export default function AdminUtilitiesPage() {
     void refetchMarketplaceInit();
     void refetchCollectionExists();
     void refetchCollection();
+    void refetchStrategyInit();
+    void refetchStrategyTreasury();
   }, [
     refetchPool,
     refetchMarketplace,
@@ -176,6 +208,8 @@ export default function AdminUtilitiesPage() {
     refetchMarketplaceInit,
     refetchCollectionExists,
     refetchCollection,
+    refetchStrategyInit,
+    refetchStrategyTreasury,
   ]);
 
   // Handle create pool
@@ -566,6 +600,59 @@ export default function AdminUtilitiesPage() {
     signAndSubmitTransaction,
     toast,
     refetchCollection,
+  ]);
+
+  // Handle initialize strategy
+  const handleInitializeStrategy = useCallback(async () => {
+    if (!currentAddress) {
+      toast({
+        title: 'Connect wallet',
+        description: 'Please connect your wallet first.',
+        status: 'warning',
+      });
+      return;
+    }
+
+    setIsInitializingStrategy(true);
+    try {
+      const tx = buildInitializeStrategyTransaction();
+      const result = await signAndSubmitTransaction(tx);
+      const txHash = result.hash;
+
+      toast({
+        title: 'Transaction submitted',
+        description: `Initializing strategy... TX: ${txHash.slice(0, 10)}...`,
+        status: 'info',
+        duration: 5000,
+      });
+
+      await waitForTransaction(txHash);
+
+      toast({
+        title: 'Strategy initialized!',
+        description: 'The strategy module is now active with a new treasury.',
+        status: 'success',
+        duration: 5000,
+      });
+
+      void refetchStrategyInit();
+      void refetchStrategyTreasury();
+    } catch (error: any) {
+      console.error('Initialize strategy error:', error);
+      toast({
+        title: 'Failed to initialize strategy',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+      });
+    } finally {
+      setIsInitializingStrategy(false);
+    }
+  }, [
+    currentAddress,
+    signAndSubmitTransaction,
+    toast,
+    refetchStrategyInit,
+    refetchStrategyTreasury,
   ]);
 
   if (!connected) {
@@ -1006,6 +1093,81 @@ export default function AdminUtilitiesPage() {
                   >
                     Batch Mint {batchCount} NFT{parseInt(batchCount) !== 1 ? 's' : ''}
                   </Button>
+                </VStack>
+              )}
+            </VStack>
+          </CardBody>
+        </Card>
+
+        {/* Strategy Module */}
+        <Card>
+          <CardHeader>
+            <HStack justify="space-between">
+              <Heading size="md">Strategy Module</Heading>
+              <Badge colorScheme={strategyInitialized ? 'green' : 'yellow'}>
+                {strategyInitialized ? 'Initialized' : 'Not Initialized'}
+              </Badge>
+            </HStack>
+          </CardHeader>
+          <CardBody>
+            <VStack align="start" spacing={4}>
+              <Text fontSize="sm" color="gray.600">
+                The Strategy module enables automated floor buying and relisting of NFTs. When
+                initialized, it creates a treasury object that can hold WMOVE and execute buy/relist
+                actions on behalf of the protocol.
+              </Text>
+
+              {strategyInitialized ? (
+                <VStack align="start" spacing={3} w="100%">
+                  <Stat>
+                    <StatLabel>Treasury Address</StatLabel>
+                    <StatNumber fontSize="md" fontFamily="mono">
+                      {strategyTreasuryAddress?.slice(0, 16)}...{strategyTreasuryAddress?.slice(-8)}
+                    </StatNumber>
+                    <StatHelpText>
+                      This is where WMOVE is held for floor buying operations.
+                    </StatHelpText>
+                  </Stat>
+                  <Link
+                    href={`https://explorer.movementnetwork.xyz/account/${strategyTreasuryAddress}?network=testnet`}
+                    isExternal
+                    color="blue.500"
+                    fontSize="sm"
+                  >
+                    View Treasury on Explorer <ExternalLinkIcon mx="2px" />
+                  </Link>
+                </VStack>
+              ) : (
+                <VStack align="start" spacing={4} w="100%">
+                  <VStack align="start" spacing={1}>
+                    <Text fontWeight="bold" fontSize="sm">
+                      Preview Treasury Address:
+                    </Text>
+                    <Text fontSize="sm" fontFamily="mono" color="gray.600">
+                      {treasuryAddressPreview ? (
+                        <>
+                          {treasuryAddressPreview.slice(0, 20)}...
+                          {treasuryAddressPreview.slice(-12)}
+                        </>
+                      ) : (
+                        'Computing...'
+                      )}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      This address is deterministic based on your admin address.
+                    </Text>
+                  </VStack>
+                  <Divider />
+                  <Button
+                    colorScheme="green"
+                    onClick={handleInitializeStrategy}
+                    isLoading={isInitializingStrategy}
+                  >
+                    Initialize Strategy
+                  </Button>
+                  <Text fontSize="xs" color="gray.500">
+                    Note: Once initialized, the treasury address cannot be changed.
+                  </Text>
                 </VStack>
               )}
             </VStack>

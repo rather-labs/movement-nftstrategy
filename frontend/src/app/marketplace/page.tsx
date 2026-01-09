@@ -711,6 +711,76 @@ export default function MarketplacePage() {
       <VStack spacing={8} align="stretch">
         <Heading size="lg">NFT Marketplace</Heading>
 
+        {/* Buy NFT Section */}
+        <Card>
+          <CardHeader>
+            <HStack justify="space-between" wrap="wrap" gap={4}>
+              <VStack align="start" spacing={1}>
+                <HStack>
+                  <Heading size="md">Buy NFTs</Heading>
+                  <Badge colorScheme="green">{listedNfts.length}</Badge>
+                </HStack>
+                <Text fontSize="sm" color="gray.500">
+                  Browse and purchase NFTs listed for sale on the marketplace.
+                </Text>
+              </VStack>
+            </HStack>
+          </CardHeader>
+          <CardBody>
+            {listedNftsLoading ? (
+              <Center py={8}>
+                <Spinner size="lg" />
+              </Center>
+            ) : paginatedListedNfts.length > 0 ? (
+              <VStack spacing={6}>
+                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4} width="100%">
+                  {paginatedListedNfts.map((nft) => (
+                    <BuyNftCard
+                      key={nft.nftAddress}
+                      nft={nft}
+                      currentAddress={currentAddress}
+                      onBuy={handleBuyNft}
+                      isBuying={buyingNftAddress === nft.nftAddress}
+                    />
+                  ))}
+                </SimpleGrid>
+
+                {/* Pagination */}
+                {buyTotalPages > 1 && (
+                  <HStack spacing={4}>
+                    <IconButton
+                      aria-label="Previous page"
+                      icon={<ChevronLeftIcon />}
+                      onClick={() => setBuyPage((p) => Math.max(1, p - 1))}
+                      isDisabled={buyPage === 1}
+                      size="sm"
+                    />
+                    <Text fontSize="sm" color="gray.500">
+                      Page {buyPage} of {buyTotalPages}
+                    </Text>
+                    <IconButton
+                      aria-label="Next page"
+                      icon={<ChevronRightIcon />}
+                      onClick={() => setBuyPage((p) => Math.min(buyTotalPages, p + 1))}
+                      isDisabled={buyPage === buyTotalPages}
+                      size="sm"
+                    />
+                  </HStack>
+                )}
+              </VStack>
+            ) : (
+              <Center py={8}>
+                <VStack spacing={2}>
+                  <Text color="gray.500">No NFTs are currently listed for sale</Text>
+                  <Text fontSize="sm" color="gray.400">
+                    Check back later or list your own NFTs below
+                  </Text>
+                </VStack>
+              </Center>
+            )}
+          </CardBody>
+        </Card>
+
         {/* My NFTs Section */}
         <Card>
           <CardHeader>
@@ -798,77 +868,7 @@ export default function MarketplacePage() {
                 <VStack spacing={2}>
                   <Text color="gray.500">You don&apos;t own any NFTs yet</Text>
                   <Text fontSize="sm" color="gray.400">
-                    NFTs can be minted from the Admin page or purchased below
-                  </Text>
-                </VStack>
-              </Center>
-            )}
-          </CardBody>
-        </Card>
-
-        {/* Buy NFT Section */}
-        <Card>
-          <CardHeader>
-            <HStack justify="space-between" wrap="wrap" gap={4}>
-              <VStack align="start" spacing={1}>
-                <HStack>
-                  <Heading size="md">Buy NFTs</Heading>
-                  <Badge colorScheme="green">{listedNfts.length}</Badge>
-                </HStack>
-                <Text fontSize="sm" color="gray.500">
-                  Browse and purchase NFTs listed for sale on the marketplace.
-                </Text>
-              </VStack>
-            </HStack>
-          </CardHeader>
-          <CardBody>
-            {listedNftsLoading ? (
-              <Center py={8}>
-                <Spinner size="lg" />
-              </Center>
-            ) : paginatedListedNfts.length > 0 ? (
-              <VStack spacing={6}>
-                <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4} width="100%">
-                  {paginatedListedNfts.map((nft) => (
-                    <BuyNftCard
-                      key={nft.nftAddress}
-                      nft={nft}
-                      currentAddress={currentAddress}
-                      onBuy={handleBuyNft}
-                      isBuying={buyingNftAddress === nft.nftAddress}
-                    />
-                  ))}
-                </SimpleGrid>
-
-                {/* Pagination */}
-                {buyTotalPages > 1 && (
-                  <HStack spacing={4}>
-                    <IconButton
-                      aria-label="Previous page"
-                      icon={<ChevronLeftIcon />}
-                      onClick={() => setBuyPage((p) => Math.max(1, p - 1))}
-                      isDisabled={buyPage === 1}
-                      size="sm"
-                    />
-                    <Text fontSize="sm" color="gray.500">
-                      Page {buyPage} of {buyTotalPages}
-                    </Text>
-                    <IconButton
-                      aria-label="Next page"
-                      icon={<ChevronRightIcon />}
-                      onClick={() => setBuyPage((p) => Math.min(buyTotalPages, p + 1))}
-                      isDisabled={buyPage === buyTotalPages}
-                      size="sm"
-                    />
-                  </HStack>
-                )}
-              </VStack>
-            ) : (
-              <Center py={8}>
-                <VStack spacing={2}>
-                  <Text color="gray.500">No NFTs are currently listed for sale</Text>
-                  <Text fontSize="sm" color="gray.400">
-                    Check back later or list your own NFTs above
+                    NFTs can be minted from the Admin page or purchased above
                   </Text>
                 </VStack>
               </Center>

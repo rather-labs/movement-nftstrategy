@@ -315,3 +315,142 @@ export const useTrackTransaction = (txHash: string | null) => {
     refetchIntervalInBackground: true,
   });
 };
+
+// Floor listing information
+export interface FloorListing {
+  nftAddress: string;
+  tokenId: number;
+  collectionAddress: string;
+  seller: string;
+  price: number; // in octas (8 decimals)
+}
+
+// Response type for floor listing query
+export interface FloorListingResult {
+  floor: FloorListing | null;
+  totalListings: number;
+}
+
+/**
+ * Hook to fetch the floor (cheapest) listing from the marketplace
+ * Returns the cheapest listed NFT and total listing count
+ */
+export const useFloorListing = (): UseQueryResult<FloorListingResult> => {
+  const { network } = useWallet();
+
+  return useQuery<FloorListingResult>({
+    queryKey: ['floorListing', network?.chainId],
+    queryFn: async () => {
+      const client = getAptosClient();
+
+      try {
+        // First, get the collection address
+        const collectionAddrResult = await client.view({
+          payload: {
+            function: NFT_FUNCTIONS.GET_COLLECTION_ADDRESS as `${string}::${string}::${string}`,
+            typeArguments: [],
+            functionArguments: [MODULE_ADDRESS],
+          },
+        });
+
+        const collectionAddress = collectionAddrResult[0] as string;
+
+        // Get current supply to know how many NFTs exist
+        const supplyResult = await client.view({
+          payload: {
+            function: NFT_FUNCTIONS.GET_CURRENT_SUPPLY as `${string}::${string}::${string}`,
+            typeArguments: [],
+            functionArguments: [collectionAddress],
+          },
+        });
+
+        const currentSupply = Number(supplyResult[0]);
+
+        if (currentSupply === 0) {
+          return { floor: null, totalListings: 0 };
+        }
+
+        // Find all listings and track the cheapest
+        // Use an object to hold the floor listing so it can be mutated in async closures
+        const state: { floor: FloorListing | null; totalListings: number } = {
+          floor: null,
+          totalListings: 0,
+        };
+
+        // Process in batches to avoid too many parallel requests
+        const batchSize = 10;
+        for (let startId = 1; startId <= currentSupply; startId += batchSize) {
+          const endId = Math.min(startId + batchSize - 1, currentSupply);
+          const promises: Promise<void>[] = [];
+
+          for (let tokenId = startId; tokenId <= endId; tokenId++) {
+            promises.push(
+              (async () => {
+                try {
+                  // Get NFT address by token ID
+                  const nftAddrResult = await client.view({
+                    payload: {
+                      function:
+                        NFT_FUNCTIONS.GET_NFT_BY_TOKEN_ID as `${string}::${string}::${string}`,
+                      typeArguments: [],
+                      functionArguments: [collectionAddress, tokenId.toString()],
+                    },
+                  });
+
+                  const nftAddress = nftAddrResult[0] as string;
+
+                  // Check if this NFT is listed
+                  try {
+                    const listingResult = await client.view({
+                      payload: {
+                        function:
+                          MARKETPLACE_FUNCTIONS.GET_LISTING as `${string}::${string}::${string}`,
+                        typeArguments: [],
+                        functionArguments: [nftAddress],
+                      },
+                    });
+
+                    const seller = listingResult[0] as string;
+                    const price = Number(listingResult[1]);
+
+                    state.totalListings++;
+
+                    // Track the cheapest listing
+                    if (state.floor === null || price < state.floor.price) {
+                      state.floor = {
+                        nftAddress,
+                        tokenId,
+                        collectionAddress,
+                        seller,
+                        price,
+                      };
+                    }
+                  } catch {
+                    // NFT is not listed, skip
+                  }
+                } catch (error) {
+                  // NFT might have been burned, skip it
+                  console.debug(`Error checking NFT #${tokenId}:`, error);
+                }
+              })()
+            );
+          }
+
+          await Promise.all(promises);
+        }
+
+        return {
+          floor: state.floor,
+          totalListings: state.totalListings,
+        };
+      } catch (error) {
+        console.error('Error fetching floor listing:', error);
+        return { floor: null, totalListings: 0 };
+      }
+    },
+    retry: false,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    staleTime: 10000,
+  });
+};

@@ -475,5 +475,119 @@ module nft_strategy_addr::marketplace {
     public fun is_initialized(): bool {
         exists<Marketplace>(@nft_strategy_addr)
     }
+
+    // ============ Public Functions for Module Interoperability ============
+
+    /// Buy a listed NFT (non-entry version for module calls)
+    /// Transfers MOVE from buyer to seller (minus fee), NFT from escrow to buyer
+    public fun buy_nft_internal<T: key>(
+        buyer: &signer, nft: Object<T>
+    ) acquires Marketplace, EscrowInfo {
+        let buyer_addr = signer::address_of(buyer);
+        let nft_address = object::object_address(&nft);
+
+        assert!(
+            exists<Marketplace>(@nft_strategy_addr),
+            errors::marketplace_not_initialized()
+        );
+
+        let marketplace = borrow_global_mut<Marketplace>(@nft_strategy_addr);
+
+        // Check listing exists
+        assert!(
+            smart_table::contains(&marketplace.listings, nft_address),
+            errors::listing_not_exists()
+        );
+
+        let listing = smart_table::borrow(&marketplace.listings, nft_address);
+        let seller_addr = listing.seller;
+        let price = listing.price;
+
+        // Seller cannot buy their own NFT
+        assert!(buyer_addr != seller_addr, errors::seller_cannot_buy());
+
+        // Calculate fee
+        let fee_amount = (price * marketplace.fee_bps) / BPS_DENOMINATOR;
+
+        // Withdraw payment from buyer
+        let payment = coin::withdraw<AptosCoin>(buyer, price);
+
+        // Split payment: fee to recipient, rest to seller
+        if (fee_amount > 0) {
+            let fee_coin = coin::extract(&mut payment, fee_amount);
+            coin::deposit(marketplace.fee_recipient, fee_coin);
+        };
+        coin::deposit(seller_addr, payment);
+
+        // Get current NFT owner (escrow address)
+        let escrow_addr = object::owner(nft);
+
+        // Transfer NFT from escrow to buyer
+        let EscrowInfo { extend_ref, original_owner: _ } =
+            move_from<EscrowInfo>(escrow_addr);
+        let escrow_signer = object::generate_signer_for_extending(&extend_ref);
+        object::transfer(&escrow_signer, nft, buyer_addr);
+
+        // Remove listing and update stats
+        smart_table::remove(&mut marketplace.listings, nft_address);
+        marketplace.total_sales = marketplace.total_sales + 1;
+
+        event::emit(
+            ListingSold {
+                nft_address,
+                seller: seller_addr,
+                buyer: buyer_addr,
+                price,
+                fee_amount
+            }
+        );
+    }
+
+    /// List an NFT for sale (non-entry version for module calls)
+    /// Transfers the NFT to escrow and creates a listing
+    public fun list_nft_internal<T: key>(
+        seller: &signer, nft: Object<T>, price: u64
+    ) acquires Marketplace {
+        let seller_addr = signer::address_of(seller);
+        let nft_address = object::object_address(&nft);
+
+        assert!(
+            exists<Marketplace>(@nft_strategy_addr),
+            errors::marketplace_not_initialized()
+        );
+
+        // Validate price
+        assert!(price > 0, errors::invalid_price());
+
+        // Verify seller owns the NFT
+        assert!(object::is_owner(nft, seller_addr), errors::nft_not_owned());
+
+        let marketplace = borrow_global_mut<Marketplace>(@nft_strategy_addr);
+
+        // Check NFT is not already listed
+        assert!(
+            !smart_table::contains(&marketplace.listings, nft_address),
+            errors::listing_already_exists()
+        );
+
+        // Create escrow object to hold the NFT
+        let constructor_ref = object::create_object(seller_addr);
+        let extend_ref = object::generate_extend_ref(&constructor_ref);
+        let escrow_signer = object::generate_signer(&constructor_ref);
+        let escrow_addr = signer::address_of(&escrow_signer);
+
+        // Store escrow info on the escrow object
+        move_to(&escrow_signer, EscrowInfo { extend_ref, original_owner: seller_addr });
+
+        // Transfer NFT to escrow
+        object::transfer(seller, nft, escrow_addr);
+
+        // Create listing
+        let listing = Listing { seller: seller_addr, nft_address, price };
+
+        smart_table::add(&mut marketplace.listings, nft_address, listing);
+
+        event::emit(ListingCreated { nft_address, seller: seller_addr, price });
+    }
 }
 

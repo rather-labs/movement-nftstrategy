@@ -12,8 +12,6 @@ import {
   CardBody,
   CardHeader,
   Container,
-  Divider,
-  Flex,
   FormControl,
   FormLabel,
   FormHelperText,
@@ -24,7 +22,6 @@ import {
   NumberInputField,
   SimpleGrid,
   Spinner,
-  Stack,
   Stat,
   StatLabel,
   StatNumber,
@@ -39,7 +36,7 @@ import {
   Center,
   VStack,
 } from '@chakra-ui/react';
-import { ExternalLinkIcon } from '@chakra-ui/icons';
+import { ExternalLinkIcon, ArrowForwardIcon } from '@chakra-ui/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/lib/wallet-context';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
@@ -85,8 +82,8 @@ export default function LiquidityPage() {
   const [isRemovingLiquidity, setIsRemovingLiquidity] = useState(false);
 
   // Wrap/Unwrap state
-  const [wrapAmount, setWrapAmount] = useState('');
-  const [unwrapAmount, setUnwrapAmount] = useState('');
+  const [wrapDirection, setWrapDirection] = useState<'wrap' | 'unwrap'>('wrap');
+  const [wrapUnwrapAmount, setWrapUnwrapAmount] = useState('');
   const [isWrapping, setIsWrapping] = useState(false);
   const [isUnwrapping, setIsUnwrapping] = useState(false);
 
@@ -426,11 +423,17 @@ export default function LiquidityPage() {
     setRemoveAmount(lpBalanceDisplay.toString());
   }, [lpBalanceDisplay]);
 
+  // Handle wrap direction change
+  const handleWrapDirectionChange = useCallback((direction: 'wrap' | 'unwrap') => {
+    setWrapDirection(direction);
+    setWrapUnwrapAmount('');
+  }, []);
+
   // Wrap MOVE to WMOVE
   const handleWrap = useCallback(async () => {
     if (!currentAddress) return;
 
-    const parsedAmount = parseFloat(wrapAmount);
+    const parsedAmount = parseFloat(wrapUnwrapAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: 'Invalid amount',
@@ -466,7 +469,7 @@ export default function LiquidityPage() {
         duration: 10000,
       });
 
-      setWrapAmount('');
+      setWrapUnwrapAmount('');
       void refetchMoveBalance();
       void refetchWmoveBalance();
     } catch (error: any) {
@@ -480,7 +483,7 @@ export default function LiquidityPage() {
     }
   }, [
     currentAddress,
-    wrapAmount,
+    wrapUnwrapAmount,
     signAndSubmitTransaction,
     toast,
     refetchMoveBalance,
@@ -491,7 +494,7 @@ export default function LiquidityPage() {
   const handleUnwrap = useCallback(async () => {
     if (!currentAddress) return;
 
-    const parsedAmount = parseFloat(unwrapAmount);
+    const parsedAmount = parseFloat(wrapUnwrapAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({
         title: 'Invalid amount',
@@ -527,7 +530,7 @@ export default function LiquidityPage() {
         duration: 10000,
       });
 
-      setUnwrapAmount('');
+      setWrapUnwrapAmount('');
       void refetchMoveBalance();
       void refetchWmoveBalance();
     } catch (error: any) {
@@ -541,23 +544,32 @@ export default function LiquidityPage() {
     }
   }, [
     currentAddress,
-    unwrapAmount,
+    wrapUnwrapAmount,
     signAndSubmitTransaction,
     toast,
     refetchMoveBalance,
     refetchWmoveBalance,
   ]);
 
-  // MAX handlers for wrap/unwrap
-  const handleMaxWrap = useCallback(() => {
-    // Leave a small buffer for gas fees (0.1 MOVE)
-    const maxAmount = Math.max(0, moveBalanceDisplay - 0.1);
-    setWrapAmount(maxAmount > 0 ? maxAmount.toFixed(8) : '');
-  }, [moveBalanceDisplay]);
+  // MAX handler for wrap/unwrap
+  const handleMaxWrapUnwrap = useCallback(() => {
+    if (wrapDirection === 'wrap') {
+      // Leave a small buffer for gas fees (0.1 MOVE)
+      const maxAmount = Math.max(0, moveBalanceDisplay - 0.1);
+      setWrapUnwrapAmount(maxAmount > 0 ? maxAmount.toFixed(8) : '');
+    } else {
+      setWrapUnwrapAmount(wmoveBalanceDisplay.toString());
+    }
+  }, [wrapDirection, moveBalanceDisplay, wmoveBalanceDisplay]);
 
-  const handleMaxUnwrap = useCallback(() => {
-    setUnwrapAmount(wmoveBalanceDisplay.toString());
-  }, [wmoveBalanceDisplay]);
+  // Handle wrap/unwrap action based on direction
+  const handleWrapUnwrapAction = useCallback(() => {
+    if (wrapDirection === 'wrap') {
+      handleWrap();
+    } else {
+      handleUnwrap();
+    }
+  }, [wrapDirection, handleWrap, handleUnwrap]);
 
   return (
     <Container maxW="container.xl" py={10}>
@@ -665,6 +677,123 @@ export default function LiquidityPage() {
                 isDisabled={isSwapDisabled}
               >
                 {swapButtonLabel}
+              </Button>
+            </VStack>
+          </CardBody>
+        </Card>
+
+        {/* Wrap/Unwrap MOVE Card */}
+        <Card>
+          <CardHeader>
+            <Heading size="md">Wrap / Unwrap MOVE</Heading>
+          </CardHeader>
+          <CardBody>
+            <VStack spacing={6}>
+              <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
+                Convert between native MOVE and WMOVE (Wrapped MOVE). WMOVE is required for pool
+                operations.
+              </Text>
+
+              {/* Balance Display */}
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} width="100%">
+                <Box p={3} bg="gray.50" borderRadius="md" _dark={{ bg: 'gray.700' }}>
+                  <Stat size="sm">
+                    <StatLabel>MOVE Balance</StatLabel>
+                    <StatNumber fontSize="lg">
+                      {moveBalanceLoading ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        `${moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} MOVE`
+                      )}
+                    </StatNumber>
+                    <StatHelpText>Native token</StatHelpText>
+                  </Stat>
+                </Box>
+                <Box p={3} bg="blue.50" borderRadius="md" _dark={{ bg: 'blue.900' }}>
+                  <Stat size="sm">
+                    <StatLabel>WMOVE Balance</StatLabel>
+                    <StatNumber fontSize="lg">
+                      {wmoveBalanceLoading ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        `${wmoveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} WMOVE`
+                      )}
+                    </StatNumber>
+                    <StatHelpText>Wrapped token</StatHelpText>
+                  </Stat>
+                </Box>
+              </SimpleGrid>
+
+              {/* Direction Toggle */}
+              <ButtonGroup size="sm" isAttached variant="outline" width="100%">
+                <Button
+                  flex={1}
+                  isActive={wrapDirection === 'wrap'}
+                  onClick={() => handleWrapDirectionChange('wrap')}
+                >
+                  MOVE → WMOVE
+                </Button>
+                <Button
+                  flex={1}
+                  isActive={wrapDirection === 'unwrap'}
+                  onClick={() => handleWrapDirectionChange('unwrap')}
+                >
+                  WMOVE → MOVE
+                </Button>
+              </ButtonGroup>
+
+              {/* Unified Wrap/Unwrap Input */}
+              <FormControl>
+                <FormLabel>{wrapDirection === 'wrap' ? 'MOVE Amount' : 'WMOVE Amount'}</FormLabel>
+                <HStack>
+                  <NumberInput
+                    flex={1}
+                    value={wrapUnwrapAmount}
+                    onChange={(value) => setWrapUnwrapAmount(value)}
+                    min={0}
+                    max={wrapDirection === 'wrap' ? moveBalanceDisplay : wmoveBalanceDisplay}
+                    precision={8}
+                  >
+                    <NumberInputField placeholder="0.0" />
+                  </NumberInput>
+                  <Button size="md" onClick={handleMaxWrapUnwrap} variant="outline">
+                    MAX
+                  </Button>
+                </HStack>
+                <FormHelperText>
+                  Available:{' '}
+                  {wrapDirection === 'wrap'
+                    ? `${moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} MOVE`
+                    : `${wmoveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} WMOVE`}
+                </FormHelperText>
+              </FormControl>
+
+              {/* Output Display */}
+              <Box width="100%" p={4} bg="gray.50" borderRadius="md" _dark={{ bg: 'gray.700' }}>
+                <HStack justify="space-between">
+                  <Text color="gray.500">You receive</Text>
+                  <HStack>
+                    <Text fontWeight="bold">
+                      {wrapUnwrapAmount && parseFloat(wrapUnwrapAmount) > 0
+                        ? parseFloat(wrapUnwrapAmount).toLocaleString()
+                        : '0'}
+                    </Text>
+                    <Text fontWeight="bold">{wrapDirection === 'wrap' ? 'WMOVE' : 'MOVE'}</Text>
+                  </HStack>
+                </HStack>
+              </Box>
+
+              <Button
+                colorScheme={wrapDirection === 'wrap' ? 'blue' : 'orange'}
+                width="100%"
+                size="lg"
+                onClick={handleWrapUnwrapAction}
+                isLoading={wrapDirection === 'wrap' ? isWrapping : isUnwrapping}
+                isDisabled={
+                  !currentAddress || !wrapUnwrapAmount || parseFloat(wrapUnwrapAmount) <= 0
+                }
+              >
+                {wrapDirection === 'wrap' ? 'Wrap MOVE' : 'Unwrap WMOVE'}
               </Button>
             </VStack>
           </CardBody>
@@ -813,153 +942,6 @@ export default function LiquidityPage() {
                   </TabPanel>
                 </TabPanels>
               </Tabs>
-            </VStack>
-          </CardBody>
-        </Card>
-
-        {/* Wrap/Unwrap MOVE Card */}
-        <Card>
-          <CardHeader>
-            <Heading size="md">Wrap / Unwrap MOVE</Heading>
-          </CardHeader>
-          <CardBody>
-            <VStack spacing={6}>
-              <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
-                Convert between native MOVE and WMOVE (Wrapped MOVE). WMOVE is required for pool
-                operations.
-              </Text>
-
-              {/* Balance Display */}
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} width="100%">
-                <Box p={3} bg="gray.50" borderRadius="md" _dark={{ bg: 'gray.700' }}>
-                  <Stat size="sm">
-                    <StatLabel>MOVE Balance</StatLabel>
-                    <StatNumber fontSize="lg">
-                      {moveBalanceLoading ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        `${moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} MOVE`
-                      )}
-                    </StatNumber>
-                    <StatHelpText>Native token</StatHelpText>
-                  </Stat>
-                </Box>
-                <Box p={3} bg="blue.50" borderRadius="md" _dark={{ bg: 'blue.900' }}>
-                  <Stat size="sm">
-                    <StatLabel>WMOVE Balance</StatLabel>
-                    <StatNumber fontSize="lg">
-                      {wmoveBalanceLoading ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        `${wmoveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} WMOVE`
-                      )}
-                    </StatNumber>
-                    <StatHelpText>Wrapped token</StatHelpText>
-                  </Stat>
-                </Box>
-              </SimpleGrid>
-
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} width="100%">
-                {/* Wrap Panel */}
-                <Box
-                  p={4}
-                  borderWidth={1}
-                  borderRadius="md"
-                  borderColor="gray.200"
-                  _dark={{ borderColor: 'gray.600' }}
-                >
-                  <VStack spacing={4} align="stretch">
-                    <Heading size="sm">Wrap MOVE → WMOVE</Heading>
-                    <Text fontSize="xs" color="gray.500">
-                      Convert native MOVE tokens to WMOVE for use in the liquidity pool.
-                    </Text>
-                    <FormControl>
-                      <FormLabel fontSize="sm">MOVE Amount</FormLabel>
-                      <HStack>
-                        <NumberInput
-                          flex={1}
-                          value={wrapAmount}
-                          onChange={(value) => setWrapAmount(value)}
-                          min={0}
-                          max={moveBalanceDisplay}
-                          precision={8}
-                          size="sm"
-                        >
-                          <NumberInputField placeholder="0.0" />
-                        </NumberInput>
-                        <Button size="sm" onClick={handleMaxWrap} variant="outline">
-                          MAX
-                        </Button>
-                      </HStack>
-                      <FormHelperText>
-                        Available:{' '}
-                        {moveBalanceDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })}{' '}
-                        MOVE
-                      </FormHelperText>
-                    </FormControl>
-                    <Button
-                      colorScheme="blue"
-                      onClick={handleWrap}
-                      isLoading={isWrapping}
-                      isDisabled={!currentAddress || !wrapAmount || parseFloat(wrapAmount) <= 0}
-                      size="sm"
-                    >
-                      Wrap MOVE
-                    </Button>
-                  </VStack>
-                </Box>
-
-                {/* Unwrap Panel */}
-                <Box
-                  p={4}
-                  borderWidth={1}
-                  borderRadius="md"
-                  borderColor="gray.200"
-                  _dark={{ borderColor: 'gray.600' }}
-                >
-                  <VStack spacing={4} align="stretch">
-                    <Heading size="sm">Unwrap WMOVE → MOVE</Heading>
-                    <Text fontSize="xs" color="gray.500">
-                      Convert WMOVE back to native MOVE tokens.
-                    </Text>
-                    <FormControl>
-                      <FormLabel fontSize="sm">WMOVE Amount</FormLabel>
-                      <HStack>
-                        <NumberInput
-                          flex={1}
-                          value={unwrapAmount}
-                          onChange={(value) => setUnwrapAmount(value)}
-                          min={0}
-                          max={wmoveBalanceDisplay}
-                          precision={8}
-                          size="sm"
-                        >
-                          <NumberInputField placeholder="0.0" />
-                        </NumberInput>
-                        <Button size="sm" onClick={handleMaxUnwrap} variant="outline">
-                          MAX
-                        </Button>
-                      </HStack>
-                      <FormHelperText>
-                        Available:{' '}
-                        {wmoveBalanceDisplay.toLocaleString(undefined, {
-                          maximumFractionDigits: 4,
-                        })}{' '}
-                        WMOVE
-                      </FormHelperText>
-                    </FormControl>
-                    <Button
-                      colorScheme="orange"
-                      onClick={handleUnwrap}
-                      isLoading={isUnwrapping}
-                      isDisabled={!currentAddress || !unwrapAmount || parseFloat(unwrapAmount) <= 0}
-                      size="sm"
-                    >
-                      Unwrap WMOVE
-                    </Button>
-                  </VStack>
-                </Box>
-              </SimpleGrid>
             </VStack>
           </CardBody>
         </Card>
