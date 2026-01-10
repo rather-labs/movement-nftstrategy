@@ -52,8 +52,9 @@ import {
 } from '@/lib/strategy/operations';
 import { fetchPoolReserves, fromOnChainAmount, toOnChainAmount } from '@/lib/pool/operations';
 import { MODULE_ADDRESS } from '@/constants/contracts';
-import { useNftHoldings, useFloorListing } from '@/hooks/useNftHoldings';
+import { useNftHoldings, useFloorListing, useListedNfts } from '@/hooks/useNftHoldings';
 import { TokenImage } from '@/components/nft/TokenImage';
+import { addressesEqual } from '@/utils/formatting';
 
 export default function StrategyDashboard() {
   const toast = useToast();
@@ -165,8 +166,35 @@ export default function StrategyDashboard() {
     refetch: refetchFloorListing,
   } = useFloorListing();
 
-  // Strategy's NFT holdings (owned by deployer/MODULE_ADDRESS)
+  // All listed NFTs from marketplace
+  const { data: allListedNfts, isLoading: listedNftsLoading } = useListedNfts();
+
+  // Strategy's NFT holdings (owned by deployer/MODULE_ADDRESS - for non-listed NFTs)
   const { data: strategyNfts, isLoading: nftsLoading } = useNftHoldings(MODULE_ADDRESS);
+
+  // Treasury's listed NFTs - filter all listings to find those where seller is treasury or MODULE_ADDRESS
+  const treasuryListedNfts = useMemo(() => {
+    if (!allListedNfts?.items) return [];
+    return allListedNfts.items.filter(
+      (nft) =>
+        (MODULE_ADDRESS && addressesEqual(nft.seller, MODULE_ADDRESS)) ||
+        (treasuryAddress && addressesEqual(nft.seller, treasuryAddress))
+    );
+  }, [allListedNfts, treasuryAddress]);
+
+  // Combined holdings: both owned NFTs and listed NFTs by treasury
+  const allTreasuryNfts = useMemo(() => {
+    const ownedNfts = strategyNfts?.items ?? [];
+    // Create a set of listed NFT addresses to avoid duplicates
+    const listedAddresses = new Set(treasuryListedNfts.map((nft) => nft.nftAddress));
+    // Filter out owned NFTs that are also listed (to avoid duplicates)
+    const ownedNotListed = ownedNfts.filter((nft) => !listedAddresses.has(nft.nftAddress));
+    // Return all listed + owned (not listed)
+    return [
+      ...treasuryListedNfts.map((nft) => ({ ...nft, isListed: true, listPrice: nft.price })),
+      ...ownedNotListed.map((nft) => ({ ...nft, isListed: false, listPrice: undefined })),
+    ];
+  }, [strategyNfts, treasuryListedNfts]);
 
   // RATHER token stats (total minted, burned, current supply)
   const {
@@ -598,41 +626,63 @@ export default function StrategyDashboard() {
         </Card>
 
         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-          {/* Current Holdings - NFTs owned by strategy */}
+          {/* Current Holdings - NFTs owned/listed by treasury */}
           <Card>
             <CardHeader>
               <Stack spacing={1}>
                 <HStack spacing={2} align="center">
                   <Heading size="md">Current Holdings</Heading>
-                  <Badge colorScheme="purple">{strategyNfts?.total ?? 0} NFTs</Badge>
+                  <Badge colorScheme="purple">{allTreasuryNfts.length} NFTs</Badge>
                 </HStack>
                 <Text fontSize="sm" color="text.secondary">
-                  NFTs currently owned by the strategy address.
+                  NFTs held or listed by the treasury in the marketplace.
                 </Text>
               </Stack>
             </CardHeader>
             <Divider />
             <CardBody>
-              {nftsLoading ? (
+              {nftsLoading || listedNftsLoading ? (
                 <Center py={8}>
                   <Spinner size="lg" />
                 </Center>
-              ) : strategyNfts && strategyNfts.items.length > 0 ? (
+              ) : allTreasuryNfts.length > 0 ? (
                 <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={4}>
-                  {strategyNfts.items.map((nft) => (
-                    <Box key={nft.nftAddress} borderRadius="lg" overflow="hidden" bg="gray.50">
+                  {allTreasuryNfts.map((nft) => (
+                    <Box
+                      key={nft.nftAddress}
+                      borderRadius="lg"
+                      overflow="hidden"
+                      bg="gray.50"
+                      position="relative"
+                    >
                       <TokenImage nftAddress={nft.nftAddress} alt={`NFT #${nft.tokenId}`} />
+                      {nft.isListed && (
+                        <Badge
+                          colorScheme="green"
+                          position="absolute"
+                          top={2}
+                          right={2}
+                          fontSize="xs"
+                        >
+                          Listed
+                        </Badge>
+                      )}
                       <Box p={2}>
                         <Text fontSize="sm" fontWeight="medium" textAlign="center">
                           #{nft.tokenId}
                         </Text>
+                        {nft.isListed && nft.listPrice && (
+                          <Text fontSize="xs" color="green.600" textAlign="center">
+                            {fromOnChainAmount(nft.listPrice).toFixed(2)} MOVE
+                          </Text>
+                        )}
                       </Box>
                     </Box>
                   ))}
                 </SimpleGrid>
               ) : (
                 <Center py={8}>
-                  <Text color="text.secondary">No NFTs currently held by the strategy.</Text>
+                  <Text color="text.secondary">No NFTs currently held by the treasury.</Text>
                 </Center>
               )}
             </CardBody>
