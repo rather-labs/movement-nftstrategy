@@ -1,6 +1,7 @@
 // Movement Contract Module Address
 // This is the address where the Move modules are deployed
-export const MODULE_ADDRESS = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+// export const MODULE_ADDRESS = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+export const MODULE_ADDRESS = '0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b';
 
 // Module names
 export const MODULES = {
