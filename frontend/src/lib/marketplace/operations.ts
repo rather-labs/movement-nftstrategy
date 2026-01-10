@@ -79,6 +79,66 @@ export function buildBuyNftTransaction(nftAddress: string): InputTransactionData
   };
 }
 
+/**
+ * Build transaction to initialize the marketplace
+ * @param feeBps - Fee in basis points (e.g., 100 = 1%)
+ * @param feeRecipient - Address to receive marketplace fees
+ */
+export function buildInitializeMarketplaceTransaction(
+  feeBps: number,
+  feeRecipient: string
+): InputTransactionData {
+  return {
+    data: {
+      function: MARKETPLACE_FUNCTIONS.INITIALIZE,
+      typeArguments: [],
+      functionArguments: [feeBps, feeRecipient],
+    },
+  };
+}
+
+/**
+ * Build transaction to set marketplace fee
+ * @param newFeeBps - New fee in basis points (max 1000 = 10%)
+ */
+export function buildSetFeeBpsTransaction(newFeeBps: number): InputTransactionData {
+  return {
+    data: {
+      function: MARKETPLACE_FUNCTIONS.SET_FEE_BPS,
+      typeArguments: [],
+      functionArguments: [newFeeBps],
+    },
+  };
+}
+
+/**
+ * Build transaction to set fee recipient
+ * @param newRecipient - New fee recipient address
+ */
+export function buildSetFeeRecipientTransaction(newRecipient: string): InputTransactionData {
+  return {
+    data: {
+      function: MARKETPLACE_FUNCTIONS.SET_FEE_RECIPIENT,
+      typeArguments: [],
+      functionArguments: [newRecipient],
+    },
+  };
+}
+
+/**
+ * Build transaction to transfer marketplace admin role
+ * @param newAdmin - New admin address
+ */
+export function buildSetMarketplaceAdminTransaction(newAdmin: string): InputTransactionData {
+  return {
+    data: {
+      function: MARKETPLACE_FUNCTIONS.SET_ADMIN,
+      typeArguments: [],
+      functionArguments: [newAdmin],
+    },
+  };
+}
+
 // ============ View Functions ============
 
 /**

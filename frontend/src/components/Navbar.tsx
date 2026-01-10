@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { ConnectWalletButton } from './ConnectWallet';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { MODULE_ADDRESS } from '@/constants/contracts';
+import { addressesEqual } from '@/utils/formatting';
 
 export const Navbar = () => {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -13,8 +14,8 @@ export const Navbar = () => {
 
   // Check if current user is the contract deployer (admin)
   const isAdmin = useMemo(() => {
-    if (!currentAddress) return false;
-    return currentAddress.toLowerCase() === MODULE_ADDRESS.toLowerCase();
+    if (!currentAddress || !MODULE_ADDRESS) return false;
+    return addressesEqual(currentAddress, MODULE_ADDRESS);
   }, [currentAddress]);
 
   return (

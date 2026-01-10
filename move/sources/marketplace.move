@@ -10,6 +10,8 @@ module nft_strategy_addr::marketplace {
     use aptos_std::smart_table::{Self, SmartTable};
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::coin;
+    use aptos_framework::fungible_asset::{Self, FungibleAsset};
+    use aptos_framework::primary_fungible_store;
     use aptos_framework::object::{Self, Object, ExtendRef};
     use aptos_framework::event;
 
@@ -380,11 +382,15 @@ module nft_strategy_addr::marketplace {
         let payment = coin::withdraw<AptosCoin>(buyer, price);
 
         // Split payment: fee to recipient, rest to seller
+        // Using primary_fungible_store::deposit instead of coin::deposit
+        // This works for both regular accounts and object addresses (like treasury)
         if (fee_amount > 0) {
             let fee_coin = coin::extract(&mut payment, fee_amount);
-            coin::deposit(marketplace.fee_recipient, fee_coin);
+            let fee_fa = coin::coin_to_fungible_asset(fee_coin);
+            primary_fungible_store::deposit(marketplace.fee_recipient, fee_fa);
         };
-        coin::deposit(seller_addr, payment);
+        let payment_fa = coin::coin_to_fungible_asset(payment);
+        primary_fungible_store::deposit(seller_addr, payment_fa);
 
         // Get current NFT owner (escrow address)
         let escrow_addr = object::owner(nft);
@@ -474,6 +480,200 @@ module nft_strategy_addr::marketplace {
     /// Check if marketplace is initialized
     public fun is_initialized(): bool {
         exists<Marketplace>(@nft_strategy_addr)
+    }
+
+    // ============ Public Functions for Module Interoperability ============
+
+    /// Buy a listed NFT (non-entry version for module calls)
+    /// Transfers MOVE from buyer to seller (minus fee), NFT from escrow to buyer
+    public fun buy_nft_internal<T: key>(
+        buyer: &signer, nft: Object<T>
+    ) acquires Marketplace, EscrowInfo {
+        let buyer_addr = signer::address_of(buyer);
+        let nft_address = object::object_address(&nft);
+
+        assert!(
+            exists<Marketplace>(@nft_strategy_addr),
+            errors::marketplace_not_initialized()
+        );
+
+        let marketplace = borrow_global_mut<Marketplace>(@nft_strategy_addr);
+
+        // Check listing exists
+        assert!(
+            smart_table::contains(&marketplace.listings, nft_address),
+            errors::listing_not_exists()
+        );
+
+        let listing = smart_table::borrow(&marketplace.listings, nft_address);
+        let seller_addr = listing.seller;
+        let price = listing.price;
+
+        // Seller cannot buy their own NFT
+        assert!(buyer_addr != seller_addr, errors::seller_cannot_buy());
+
+        // Calculate fee
+        let fee_amount = (price * marketplace.fee_bps) / BPS_DENOMINATOR;
+
+        // Withdraw payment from buyer
+        let payment = coin::withdraw<AptosCoin>(buyer, price);
+
+        // Split payment: fee to recipient, rest to seller
+        // Using primary_fungible_store::deposit instead of coin::deposit
+        // This works for both regular accounts and object addresses (like treasury)
+        if (fee_amount > 0) {
+            let fee_coin = coin::extract(&mut payment, fee_amount);
+            let fee_fa = coin::coin_to_fungible_asset(fee_coin);
+            primary_fungible_store::deposit(marketplace.fee_recipient, fee_fa);
+        };
+        let payment_fa = coin::coin_to_fungible_asset(payment);
+        primary_fungible_store::deposit(seller_addr, payment_fa);
+
+        // Get current NFT owner (escrow address)
+        let escrow_addr = object::owner(nft);
+
+        // Transfer NFT from escrow to buyer
+        let EscrowInfo { extend_ref, original_owner: _ } =
+            move_from<EscrowInfo>(escrow_addr);
+        let escrow_signer = object::generate_signer_for_extending(&extend_ref);
+        object::transfer(&escrow_signer, nft, buyer_addr);
+
+        // Remove listing and update stats
+        smart_table::remove(&mut marketplace.listings, nft_address);
+        marketplace.total_sales = marketplace.total_sales + 1;
+
+        event::emit(
+            ListingSold {
+                nft_address,
+                seller: seller_addr,
+                buyer: buyer_addr,
+                price,
+                fee_amount
+            }
+        );
+    }
+
+    /// List an NFT for sale (non-entry version for module calls)
+    /// Transfers the NFT to escrow and creates a listing
+    public fun list_nft_internal<T: key>(
+        seller: &signer, nft: Object<T>, price: u64
+    ) acquires Marketplace {
+        let seller_addr = signer::address_of(seller);
+        let nft_address = object::object_address(&nft);
+
+        assert!(
+            exists<Marketplace>(@nft_strategy_addr),
+            errors::marketplace_not_initialized()
+        );
+
+        // Validate price
+        assert!(price > 0, errors::invalid_price());
+
+        // Verify seller owns the NFT
+        assert!(object::is_owner(nft, seller_addr), errors::nft_not_owned());
+
+        let marketplace = borrow_global_mut<Marketplace>(@nft_strategy_addr);
+
+        // Check NFT is not already listed
+        assert!(
+            !smart_table::contains(&marketplace.listings, nft_address),
+            errors::listing_already_exists()
+        );
+
+        // Create escrow object to hold the NFT
+        let constructor_ref = object::create_object(seller_addr);
+        let extend_ref = object::generate_extend_ref(&constructor_ref);
+        let escrow_signer = object::generate_signer(&constructor_ref);
+        let escrow_addr = signer::address_of(&escrow_signer);
+
+        // Store escrow info on the escrow object
+        move_to(&escrow_signer, EscrowInfo { extend_ref, original_owner: seller_addr });
+
+        // Transfer NFT to escrow
+        object::transfer(seller, nft, escrow_addr);
+
+        // Create listing
+        let listing = Listing { seller: seller_addr, nft_address, price };
+
+        smart_table::add(&mut marketplace.listings, nft_address, listing);
+
+        event::emit(ListingCreated { nft_address, seller: seller_addr, price });
+    }
+
+    /// Buy a listed NFT with FungibleAsset payment (for module-to-module calls)
+    /// Used by strategy module to buy NFTs on behalf of treasury
+    /// The payment is provided as FungibleAsset and NFT is sent to buyer_addr
+    public fun buy_nft_with_fa<T: key>(
+        payment: FungibleAsset, nft: Object<T>, buyer_addr: address
+    ) acquires Marketplace, EscrowInfo {
+        let nft_address = object::object_address(&nft);
+
+        assert!(
+            exists<Marketplace>(@nft_strategy_addr),
+            errors::marketplace_not_initialized()
+        );
+
+        let marketplace = borrow_global_mut<Marketplace>(@nft_strategy_addr);
+
+        // Check listing exists
+        assert!(
+            smart_table::contains(&marketplace.listings, nft_address),
+            errors::listing_not_exists()
+        );
+
+        let listing = smart_table::borrow(&marketplace.listings, nft_address);
+        let seller_addr = listing.seller;
+        let price = listing.price;
+
+        // Buyer cannot be the seller
+        assert!(buyer_addr != seller_addr, errors::seller_cannot_buy());
+
+        // Verify payment amount matches price
+        let payment_amount = fungible_asset::amount(&payment);
+        assert!(payment_amount >= price, errors::insufficient_payment());
+
+        // Calculate fee
+        let fee_amount = (price * marketplace.fee_bps) / BPS_DENOMINATOR;
+
+        // Split payment: fee to recipient, rest to seller
+        if (fee_amount > 0) {
+            let fee_fa = fungible_asset::extract(&mut payment, fee_amount);
+            primary_fungible_store::deposit(marketplace.fee_recipient, fee_fa);
+        };
+
+        // Send remaining payment to seller
+        let seller_payment = fungible_asset::extract(&mut payment, price - fee_amount);
+        primary_fungible_store::deposit(seller_addr, seller_payment);
+
+        // If there's any excess, return to buyer
+        if (fungible_asset::amount(&payment) > 0) {
+            primary_fungible_store::deposit(buyer_addr, payment);
+        } else {
+            fungible_asset::destroy_zero(payment);
+        };
+
+        // Get current NFT owner (escrow address)
+        let escrow_addr = object::owner(nft);
+
+        // Transfer NFT from escrow to buyer
+        let EscrowInfo { extend_ref, original_owner: _ } =
+            move_from<EscrowInfo>(escrow_addr);
+        let escrow_signer = object::generate_signer_for_extending(&extend_ref);
+        object::transfer(&escrow_signer, nft, buyer_addr);
+
+        // Remove listing and update stats
+        smart_table::remove(&mut marketplace.listings, nft_address);
+        marketplace.total_sales = marketplace.total_sales + 1;
+
+        event::emit(
+            ListingSold {
+                nft_address,
+                seller: seller_addr,
+                buyer: buyer_addr,
+                price,
+                fee_amount
+            }
+        );
     }
 }
 

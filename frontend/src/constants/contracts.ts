@@ -1,8 +1,6 @@
 // Movement Contract Module Address
 // This is the address where the Move modules are deployed
-export const MODULE_ADDRESS =
-  process.env.NEXT_PUBLIC_MODULE_ADDRESS ||
-  '0x9154cb2a67d450d566e5edfa1c8b711120b96f8ca3f9239f8c626be936dbb171';
+export const MODULE_ADDRESS = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
 
 // Module names
 export const MODULES = {
@@ -70,6 +68,10 @@ export const POOL_FUNCTIONS = {
   REMOVE_LIQUIDITY_ENTRY: buildFunctionId(MODULES.POOL, 'remove_liquidity_entry'),
   SWAP_X_TO_Y_ENTRY: buildFunctionId(MODULES.POOL, 'swap_x_to_y_entry'),
   SWAP_Y_TO_X_ENTRY: buildFunctionId(MODULES.POOL, 'swap_y_to_x_entry'),
+  SET_FEE_RECIPIENT: buildFunctionId(MODULES.POOL, 'set_fee_recipient'),
+  SET_FEE_BPS: buildFunctionId(MODULES.POOL, 'set_fee_bps'),
+  SET_FEE_TOKEN: buildFunctionId(MODULES.POOL, 'set_fee_token'),
+  SET_ADMIN: buildFunctionId(MODULES.POOL, 'set_admin'),
   // View functions
   GET_RESERVES: buildFunctionId(MODULES.POOL, 'get_reserves'),
   GET_FEE_INFO: buildFunctionId(MODULES.POOL, 'get_fee_info'),
@@ -97,10 +99,12 @@ export const LP_TOKEN_FUNCTIONS = {
 export const RATHER_TOKEN_FUNCTIONS = {
   MINT_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'mint_entry'),
   BURN_ENTRY: buildFunctionId(MODULES.RATHER_TOKEN, 'burn_entry'),
-  GET_BALANCE: buildFunctionId(MODULES.RATHER_TOKEN, 'get_balance'),
   BALANCE_OF: buildFunctionId(MODULES.RATHER_TOKEN, 'balance_of'),
   GET_TOTAL_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_supply'),
   GET_METADATA: buildFunctionId(MODULES.RATHER_TOKEN, 'get_metadata'),
+  GET_CURRENT_SUPPLY: buildFunctionId(MODULES.RATHER_TOKEN, 'get_current_supply'),
+  GET_TOTAL_MINTED: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_minted'),
+  GET_TOTAL_BURNED: buildFunctionId(MODULES.RATHER_TOKEN, 'get_total_burned'),
 } as const;
 
 // WMOVE functions
@@ -113,13 +117,26 @@ export const WMOVE_FUNCTIONS = {
   BALANCE_OF: buildFunctionId(MODULES.WMOVE, 'balance_of'),
 } as const;
 
+// Strategy functions
+export const STRATEGY_FUNCTIONS = {
+  INITIALIZE: buildFunctionId('strategy', 'initialize'),
+  BUY_FLOOR_AND_RELIST: buildFunctionId('strategy', 'buy_floor_and_relist'),
+  BUY_RATHER_AND_BURN: buildFunctionId('strategy', 'buy_rather_and_burn'),
+  DEPOSIT_WMOVE: buildFunctionId('strategy', 'deposit_wmove'),
+  WRAP_AND_DEPOSIT: buildFunctionId('strategy', 'wrap_and_deposit'),
+  // View functions
+  GET_STRATEGY_INFO: buildFunctionId('strategy', 'get_strategy_info'),
+  GET_TREASURY_ADDRESS: buildFunctionId('strategy', 'get_treasury_address'),
+  GET_TREASURY_ADDRESS_PREVIEW: buildFunctionId('strategy', 'get_treasury_address_preview'),
+  GET_TREASURY_WMOVE_BALANCE: buildFunctionId('strategy', 'get_treasury_wmove_balance'),
+  GET_BURNABLE_BALANCE: buildFunctionId('strategy', 'get_burnable_balance'),
+  GET_TOTAL_RATHER_BURNED: buildFunctionId('strategy', 'get_total_rather_burned'),
+  IS_INITIALIZED: buildFunctionId('strategy', 'is_initialized'),
+} as const;
+
 // Type arguments for pool operations
 export const TYPE_ARGUMENTS = {
   NFT: `${MODULE_ADDRESS}::${MODULES.NFT_COLLECTION}::NFT`,
   RATHER_TOKEN: `${MODULE_ADDRESS}::${MODULES.RATHER_TOKEN}::RatherToken`,
   WMOVE: `${MODULE_ADDRESS}::${MODULES.WMOVE}::WMOVE`,
 } as const;
-
-// Treasury address for strategy fees
-export const TREASURY_ADDRESS =
-  '0x1ed06520719f004c44597b27ffd2f6034d2bffef050d2e2b41f8fecfa7cdeb0b';
